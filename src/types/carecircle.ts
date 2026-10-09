@@ -1,3 +1,5 @@
+export type { SuiAccount } from '@/components/WalletModal';
+
 export type CaregiverRole = 'daughter' | 'nurse' | 'physio' | 'physician' | 'patient' | 'owner' | string;
 
 export interface Caregiver {
@@ -76,9 +78,11 @@ export interface WalrusConsoleFile {
   status: 'active' | 'pending' | 'uploading';
   createdAt: string;
   updatedAt?: string;
+  ownerAddress?: string;
   metadata?: {
     tags?: string[];
     description?: string;
+    ownerAddress?: string;
   };
 }
 

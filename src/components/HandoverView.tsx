@@ -14,11 +14,22 @@ import {
   Upload,
   Sparkles,
 } from 'lucide-react';
-import { HandoverSummary } from '@/types/carecircle';
+import { HandoverSummary, UserProfile } from '@/types/carecircle';
+import { SuiAccount } from './WalletModal';
 import { DEFAULT_BUCKET_ID } from '@/lib/consoleConfig';
 import { PATIENT_PROFILE } from '@/lib/seedData';
 
-export function HandoverView() {
+interface HandoverViewProps {
+  suiAccount?: SuiAccount | null;
+  isGuestMode?: boolean;
+  userProfile?: UserProfile | null;
+}
+
+export function HandoverView({
+  suiAccount,
+  isGuestMode = true,
+  userProfile,
+}: HandoverViewProps = {}) {
   const [handover, setHandover] = useState<HandoverSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -97,10 +108,12 @@ Certified Walrus Blobs Consulted: ${handover.totalBlobsConsulted}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'upload',
+          walletAddress: suiAccount?.address || null,
+          isGuest: isGuestMode,
           file: {
             name: `handover_report_${handover.date}.txt`,
             content,
-            description: `Auto-generated multi-caregiver handover briefing for ${PATIENT_PROFILE.name}`,
+            description: `Auto-generated multi-caregiver handover briefing for ${userProfile?.name || PATIENT_PROFILE.name}`,
             tags: ['handover', 'clinical', 'briefing', 'walcare'],
             bucketId: DEFAULT_BUCKET_ID,
           },

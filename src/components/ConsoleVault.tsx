@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FolderLock,
   Upload,
@@ -21,11 +21,35 @@ import {
   Eye,
   Loader2,
   X,
+  Lock,
+  Wallet,
+  Sparkles,
+  AlertCircle,
 } from 'lucide-react';
-import { WalrusConsoleFile, WalrusConsoleBucket, WalrusConsoleStorageUsage } from '@/types/carecircle';
+import {
+  WalrusConsoleFile,
+  WalrusConsoleBucket,
+  WalrusConsoleStorageUsage,
+  UserProfile,
+} from '@/types/carecircle';
+import { SuiAccount } from './WalletModal';
 import { DEFAULT_BUCKET_ID, DEFAULT_SEAL_POLICY } from '@/lib/consoleConfig';
 
-export function ConsoleVault() {
+interface ConsoleVaultProps {
+  suiAccount?: SuiAccount | null;
+  isGuestMode?: boolean;
+  userProfile?: UserProfile | null;
+  onStatsUpdated?: (count: number) => void;
+  onOpenWalletModal?: () => void;
+}
+
+export function ConsoleVault({
+  suiAccount,
+  isGuestMode = true,
+  userProfile,
+  onStatsUpdated,
+  onOpenWalletModal,
+}: ConsoleVaultProps) {
   const [files, setFiles] = useState<WalrusConsoleFile[]>([]);
   const [storageUsage, setStorageUsage] = useState<WalrusConsoleStorageUsage | null>(null);
   const [buckets, setBuckets] = useState<WalrusConsoleBucket[]>([]);
@@ -46,26 +70,39 @@ export function ConsoleVault() {
   const [fileCategory, setFileCategory] = useState('clinical');
   const [isUploading, setIsUploading] = useState(false);
 
-  const fetchConsoleData = async () => {
+  const fetchConsoleData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/console');
+      const params = new URLSearchParams();
+      if (suiAccount?.address) {
+        params.append('walletAddress', suiAccount.address);
+      }
+      params.append('isGuest', isGuestMode ? 'true' : 'false');
+      if (userProfile?.walrusNamespace) {
+        params.append('walrusNamespace', userProfile.walrusNamespace);
+      }
+
+      const res = await fetch(`/api/console?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setFiles(data.files || []);
+        const docList: WalrusConsoleFile[] = data.files || [];
+        setFiles(docList);
         setBuckets(data.buckets || []);
         setStorageUsage(data.storageUsage || null);
+        if (onStatsUpdated) {
+          onStatsUpdated(docList.length);
+        }
       }
     } catch (err) {
       console.error('Error loading Walrus Console files:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [suiAccount?.address, isGuestMode, userProfile?.walrusNamespace, onStatsUpdated]);
 
   useEffect(() => {
     fetchConsoleData();
-  }, []);
+  }, [fetchConsoleData]);
 
   const handleCopyBlob = (blobId: string) => {
     navigator.clipboard.writeText(blobId);
@@ -79,19 +116,27 @@ export function ConsoleVault() {
 
     setIsUploading(true);
     try {
+      const activeBucketId = buckets[0]?.id || DEFAULT_BUCKET_ID;
       const res = await fetch('/api/console', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'upload',
+          walletAddress: suiAccount?.address || null,
+          isGuest: isGuestMode,
+          bucketId: activeBucketId,
           file: {
             name: fileName.endsWith('.txt') || fileName.endsWith('.json') || fileName.endsWith('.pdf')
               ? fileName
               : `${fileName}.txt`,
             content: fileContent,
             description: fileDesc,
-            tags: [fileCategory, 'patient', 'carecircle'],
-            bucketId: DEFAULT_BUCKET_ID,
+            tags: [
+              fileCategory,
+              userProfile?.name ? userProfile.name.toLowerCase().replace(/\s+/g, '_') : 'patient',
+              'carecircle',
+            ],
+            bucketId: activeBucketId,
           },
         }),
       });
@@ -110,9 +155,22 @@ export function ConsoleVault() {
     }
   };
 
+  const getDownloadUrl = (file: WalrusConsoleFile) => {
+    const params = new URLSearchParams({
+      action: 'download',
+      id: file.id,
+      bucketId: file.bucketId,
+      isGuest: isGuestMode ? 'true' : 'false',
+    });
+    if (suiAccount?.address) {
+      params.append('walletAddress', suiAccount.address);
+    }
+    return `/api/console?${params.toString()}`;
+  };
+
   const handleDownload = async (file: WalrusConsoleFile) => {
     try {
-      const res = await fetch(`/api/console?action=download&id=${file.id}&bucketId=${file.bucketId}`);
+      const res = await fetch(getDownloadUrl(file));
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -125,6 +183,11 @@ export function ConsoleVault() {
         URL.revokeObjectURL(url);
         return;
       }
+      if (res.status === 403) {
+        alert('Access Denied: This document is SEAL-encrypted and private to its wallet owner.');
+      } else {
+        alert('Could not download document from Walrus storage.');
+      }
     } catch (err) {
       console.error('Failed to download decrypted file:', err);
     }
@@ -135,12 +198,14 @@ export function ConsoleVault() {
     setIsPreviewLoading(true);
     setPreviewContent(null);
     try {
-      const res = await fetch(`/api/console?action=download&id=${file.id}&bucketId=${file.bucketId}`);
+      const res = await fetch(getDownloadUrl(file));
       if (res.ok) {
         const text = await res.text();
         setPreviewContent(text);
+      } else if (res.status === 403) {
+        setPreviewContent('Access Denied: You do not have decryption authorization for this medical document. It is private to another wallet.');
       } else {
-        setPreviewContent('Decryption engine unavailable. Please try downloading or verifying SEAL threshold policy.');
+        setPreviewContent('Decryption engine unavailable. Please ensure local SEAL threshold policy is active.');
       }
     } catch (err) {
       setPreviewContent('Failed to decrypt document from Walrus storage.');
@@ -149,16 +214,24 @@ export function ConsoleVault() {
     }
   };
 
-  const handleDeleteFile = async (fileId: string, fileName: string) => {
+  const handleDeleteFile = async (fileId: string, fileName: string, fileBucketId: string) => {
     if (!confirm(`Delete "${fileName}" permanently from Walrus Console?`)) return;
     try {
       const res = await fetch('/api/console', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id: fileId, bucketId: DEFAULT_BUCKET_ID }),
+        body: JSON.stringify({
+          action: 'delete',
+          id: fileId,
+          bucketId: fileBucketId || DEFAULT_BUCKET_ID,
+          walletAddress: suiAccount?.address || null,
+          isGuest: isGuestMode,
+        }),
       });
       if (res.ok) {
         await fetchConsoleData();
+      } else if (res.status === 403) {
+        alert('Access Denied: Cannot delete document owned by another wallet.');
       }
     } catch (err) {
       console.error('Failed to delete file from Walrus Console:', err);
@@ -181,34 +254,69 @@ export function ConsoleVault() {
       : `${storageUsage.percentUsed.toFixed(3)}%`
     : '0.001%';
 
+  const patientDisplayName = !isGuestMode && userProfile?.name && userProfile.name !== 'Eleanor Vance'
+    ? userProfile.name
+    : isGuestMode
+    ? 'Eleanor Vance (Demo)'
+    : 'Personal Patient';
+
   return (
     <div className="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto space-y-6">
       {/* Header Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-cyan-900/60 via-[#171A24] to-[#12151E] border border-white/10 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold">
-              Walrus Console API • Live Mainnet
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
-              SEAL Threshold Encrypted
-            </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {!isGuestMode && suiAccount ? (
+              <>
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold flex items-center gap-1.5">
+                  <Lock className="w-3 h-3 text-cyan-400" />
+                  Private Wallet Vault
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
+                  SEAL Threshold Encrypted
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[11px] font-mono">
+                  {suiAccount.address.slice(0, 6)}...{suiAccount.address.slice(-4)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold">
+                  Guest Demo Mode • Sample Records
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
+                  SEAL Threshold Encrypted
+                </span>
+              </>
+            )}
           </div>
+
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            Walrus Console Medical Storage
+            {!isGuestMode && suiAccount
+              ? `${patientDisplayName}'s Medical Records`
+              : 'Walrus Console Medical Storage'}
           </h2>
-          <p className="text-xs sm:text-sm font-medium text-slate-300 mt-1 max-w-xl">
-            Decentralized storage for Eleanor Vance&apos;s clinical records, ECG telemetry, lab metrics, and shift reports in bucket <code className="text-cyan-300 font-mono">{buckets[0]?.name || 'sandman'}</code>.
+
+          <p className="text-xs sm:text-sm font-medium text-slate-300 mt-1 max-w-xl leading-relaxed">
+            {!isGuestMode && suiAccount ? (
+              <>
+                Decentralized, encrypted medical storage for <span className="text-cyan-300 font-bold">{patientDisplayName}</span> in private bucket <code className="text-cyan-300 font-mono">{buckets[0]?.name || 'walcare-vault'}</code>. Cryptographically isolated to your Sui wallet—no other user or guest can access your files.
+              </>
+            ) : (
+              <>
+                Decentralized storage demo with sample records for Eleanor Vance in bucket <code className="text-cyan-300 font-mono">{buckets[0]?.name || 'sandman-demo'}</code>. Connect your Sui wallet to create your own isolated private vault.
+              </>
+            )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={fetchConsoleData}
             className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white font-semibold text-xs cursor-pointer transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Sync Bucket</span>
+            <span>Sync Vault</span>
           </button>
           <button
             onClick={() => setShowUploadModal(true)}
@@ -220,6 +328,32 @@ export function ConsoleVault() {
         </div>
       </div>
 
+      {/* Guest Mode Notice Banner */}
+      {isGuestMode && (
+        <div className="p-4 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200">
+          <div className="flex items-center gap-3 text-xs">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-white">Viewing Eleanor Vance Demo Records</p>
+              <p className="text-amber-200/80 text-[11px] mt-0.5">
+                These are sample clinical records. Connect your Sui wallet to get your own private vault where each user has their own documents and no one else can access them.
+              </p>
+            </div>
+          </div>
+          {onOpenWalletModal && (
+            <button
+              onClick={onOpenWalletModal}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shrink-0 cursor-pointer transition-colors flex items-center gap-1.5"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              <span>Connect Sui Wallet</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Storage Quota & Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
@@ -230,7 +364,7 @@ export function ConsoleVault() {
             <HardDrive className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">
-            {storageUsage ? `${(storageUsage.storageUsed / 1024).toFixed(1)} KB` : '7.2 KB'}
+            {storageUsage ? `${(storageUsage.storageUsed / 1024).toFixed(1)} KB` : '0.0 KB'}
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
             5.00 GB Mainnet Quota Allocated
@@ -246,7 +380,7 @@ export function ConsoleVault() {
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">{files.length}</div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Decentralized Blobs in Bucket
+            {!isGuestMode && suiAccount ? 'Private Records for Your Wallet' : 'Decentralized Blobs in Bucket'}
           </div>
         </div>
 
@@ -259,7 +393,7 @@ export function ConsoleVault() {
           </div>
           <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">100%</div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Private Patient Access Policy
+            {!isGuestMode && suiAccount ? 'Wallet Private Key Authorization' : 'Demo Policy Verification'}
           </div>
         </div>
 
@@ -271,10 +405,10 @@ export function ConsoleVault() {
             <FolderLock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           </div>
           <div className="text-xl font-black text-slate-900 dark:text-white mt-1 truncate">
-            {buckets[0]?.name || 'sandman'}
+            {buckets[0]?.name || (isGuestMode ? 'sandman-demo' : 'walcare-vault')}
           </div>
           <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-            {(buckets[0]?.id || DEFAULT_BUCKET_ID).slice(0, 12)}...
+            {(buckets[0]?.id || DEFAULT_BUCKET_ID).slice(0, 16)}...
           </div>
         </div>
       </div>
@@ -305,18 +439,72 @@ export function ConsoleVault() {
         />
       </div>
 
-      {/* File Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {isLoading ? (
-          <div className="col-span-2 text-center py-12 text-slate-500 dark:text-slate-400 text-xs">
-            Connecting to Walrus Console storage API...
+      {/* File Cards Grid or Empty State */}
+      {isLoading ? (
+        <div className="p-12 text-center rounded-3xl bg-[#141722] border border-white/10 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+          <p className="text-xs text-slate-400">Loading your Walrus Console medical documents...</p>
+        </div>
+      ) : files.length === 0 ? (
+        /* Isolated Empty State for brand new wallet user */
+        <div className="p-8 sm:p-12 text-center rounded-3xl bg-gradient-to-b from-[#141722] to-[#0E111A] border border-cyan-500/20 shadow-2xl space-y-4">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-950/50">
+            <ShieldCheck className="w-8 h-8" />
           </div>
-        ) : filteredFiles.length === 0 ? (
-          <div className="col-span-2 text-center py-12 text-slate-500 dark:text-slate-400 text-xs">
-            No clinical documents match your search.
+          <div>
+            <h3 className="text-xl font-black text-white">Your Private Medical Vault is Ready</h3>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto mt-2 leading-relaxed">
+              {!isGuestMode && suiAccount ? (
+                <>
+                  Your wallet (<span className="text-cyan-300 font-mono">{suiAccount.address.slice(0, 8)}...{suiAccount.address.slice(-6)}</span>) has an isolated, zero-knowledge Walrus vault. No other user can access or view your documents.
+                </>
+              ) : (
+                'No documents have been uploaded to this vault yet.'
+              )}
+            </p>
           </div>
-        ) : (
-          filteredFiles.map((file) => (
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto pt-2 text-left">
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
+                <Lock className="w-3.5 h-3.5" />
+                <span>SEAL Encryption</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Client-side threshold encryption before blobs touch the network.</p>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>Walrus Protocol</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Decentralized storage certified across global Sui validator nodes.</p>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10">
+              <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Strict Isolation</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Each wallet gets its own isolated bucket and document namespace.</p>
+            </div>
+          </div>
+
+          <div className="pt-3">
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold text-xs shadow-xl shadow-cyan-950/60 cursor-pointer inline-flex items-center gap-2 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Upload First Medical Document</span>
+            </button>
+          </div>
+        </div>
+      ) : filteredFiles.length === 0 ? (
+        <div className="p-12 text-center rounded-3xl bg-[#141722] border border-white/10 text-slate-400 text-xs">
+          No clinical documents match your search query: &ldquo;{searchQuery}&rdquo;.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredFiles.map((file) => (
             <div
               key={file.id}
               className="p-5 rounded-3xl bg-white dark:bg-[#141722] hover:bg-slate-50 dark:hover:bg-[#181C2A] border border-slate-200 dark:border-white/10 hover:border-cyan-500/40 shadow-lg transition-all duration-300 flex flex-col justify-between group"
@@ -328,13 +516,21 @@ export function ConsoleVault() {
                       <FileText className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-cyan-400 transition-colors">
                         {file.name}
                       </h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                         <span>{`${Math.max(1, Math.round((file.size || file.contentSize || 1024) / 1024))} KB`}</span>
                         <span>•</span>
                         <span>{new Date(file.createdAt).toLocaleDateString()}</span>
+                        {file.ownerAddress && file.ownerAddress !== 'guest' && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono text-cyan-400">
+                              {file.ownerAddress.slice(0, 6)}...{file.ownerAddress.slice(-4)}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -344,7 +540,7 @@ export function ConsoleVault() {
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-300 my-2 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-300 my-2 leading-relaxed">
                   {file.metadata?.description || 'Clinical observation file certified on Walrus storage.'}
                 </p>
 
@@ -353,7 +549,7 @@ export function ConsoleVault() {
                     {file.metadata.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-medium text-slate-300"
+                        className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[10px] font-medium text-slate-600 dark:text-slate-300"
                       >
                         #{tag}
                       </span>
@@ -362,10 +558,10 @@ export function ConsoleVault() {
                 )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
+              <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/5 flex items-center justify-between text-xs">
                 <button
                   onClick={() => handleCopyBlob(file.blobId)}
-                  className="flex items-center gap-1 font-mono text-[10px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="flex items-center gap-1 font-mono text-[10px] text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
                   title="Copy Blob ID"
                 >
                   {copiedBlobId === file.blobId ? (
@@ -384,7 +580,7 @@ export function ConsoleVault() {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => handleViewFile(file)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 font-semibold text-xs transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 font-semibold text-xs transition-colors cursor-pointer"
                     title="Decrypt and view document directly in app"
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -392,7 +588,7 @@ export function ConsoleVault() {
                   </button>
                   <button
                     onClick={() => handleDownload(file)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-semibold text-xs transition-colors cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download</span>
@@ -401,14 +597,14 @@ export function ConsoleVault() {
                     href={`https://walruscan.com/mainnet/blob/${file.blobId}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+                    className="p-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
                     title="View on Walruscan"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   <button
-                    onClick={() => handleDeleteFile(file.id, file.name)}
-                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
+                    onClick={() => handleDeleteFile(file.id, file.name, file.bucketId)}
+                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 hover:text-rose-600 transition-colors cursor-pointer"
                     title="Delete Document"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -416,9 +612,9 @@ export function ConsoleVault() {
                 </div>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Upload Modal */}
       {showUploadModal && (
@@ -431,10 +627,22 @@ export function ConsoleVault() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h3 className="text-lg font-bold">Upload Document to Walrus Console</h3>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Upload Medical Document</h3>
+                  <p className="text-[10px] text-slate-400">
+                    {!isGuestMode && suiAccount
+                      ? `Saving directly into private vault for ${suiAccount.address.slice(0, 6)}...${suiAccount.address.slice(-4)}`
+                      : 'Saving into Guest Demo vault'}
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowUploadModal(false)}
-                className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                className="text-slate-400 hover:text-white text-xs cursor-pointer p-1"
               >
                 ✕
               </button>
@@ -443,14 +651,14 @@ export function ConsoleVault() {
             <form onSubmit={handleUploadSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  File Name
+                  Document Name
                 </label>
                 <input
                   type="text"
                   value={fileName}
                   onChange={(e) => setFileName(e.target.value)}
-                  placeholder="e.g. eleanor_ecg_rhythm_strip.txt"
-                  className="w-full p-2.5 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none"
+                  placeholder="e.g. comprehensive_blood_panel.txt"
+                  className="w-full p-2.5 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500/50"
                   required
                 />
               </div>
@@ -467,6 +675,7 @@ export function ConsoleVault() {
                   <option value="clinical">Clinical Orders & Diagnosis</option>
                   <option value="telemetry">ECG / Telemetry Metrics</option>
                   <option value="medication">Medication Reconciliation</option>
+                  <option value="labs">Laboratory & Pathology Results</option>
                   <option value="handover">Shift Handover Export</option>
                 </select>
               </div>
@@ -479,21 +688,21 @@ export function ConsoleVault() {
                   type="text"
                   value={fileDesc}
                   onChange={(e) => setFileDesc(e.target.value)}
-                  placeholder="Summary of document findings..."
-                  className="w-full p-2.5 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none"
+                  placeholder="e.g. Complete metabolic panel, fasting blood glucose 98 mg/dL..."
+                  className="w-full p-2.5 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  File Content / Payload
+                  Document Content / Medical Payload
                 </label>
                 <textarea
                   rows={4}
                   value={fileContent}
                   onChange={(e) => setFileContent(e.target.value)}
-                  placeholder="Paste clinical text, JSON payload, or lab report metrics..."
-                  className="w-full p-3 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none placeholder-slate-500 font-mono"
+                  placeholder="Paste clinical text, doctor notes, JSON telemetry, or lab findings..."
+                  className="w-full p-3 rounded-xl bg-[#141722] border border-white/10 text-xs text-white focus:outline-none focus:border-cyan-500/50 placeholder-slate-500 font-mono"
                   required
                 />
               </div>
@@ -509,15 +718,17 @@ export function ConsoleVault() {
                 <button
                   type="submit"
                   disabled={isUploading}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-xs font-bold shadow-md cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isUploading ? 'Encrypting & Storing...' : 'Upload to Walrus'}
+                  {isUploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isUploading ? 'Encrypting & Storing...' : 'Upload to Walrus'}</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
       {/* In-App Decrypted Document Viewer Modal */}
       {previewFile && (
         <div

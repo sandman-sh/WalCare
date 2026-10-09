@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
           mimeType: 'text/plain',
           description: d.description || `Uploaded to Walrus Console via KIRO AI`,
           tags: ['clinical', 'kiro', 'automated'],
+          ownerAddress: userProfile?.walletAddress || null,
+          isGuest: !userProfile?.walletAddress,
         });
         const saved = await memoryStore.addMemory({
           authorId: caregiver.id,

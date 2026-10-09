@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Sidebar, ActiveTab } from '@/components/Sidebar';
 import { TopHeader } from '@/components/TopHeader';
 import { DashboardView } from '@/components/DashboardView';
@@ -237,9 +237,15 @@ export default function CareCirclePage() {
     }
   };
 
-  const fetchConsoleStats = async () => {
+  const fetchConsoleStats = useCallback(async (address?: string, guest?: boolean) => {
     try {
-      const res = await fetch('/api/console');
+      const isGuest = guest !== undefined ? guest : isGuestMode;
+      const targetAddress = address !== undefined ? address : suiAccount?.address;
+      const params = new URLSearchParams();
+      if (targetAddress) params.append('walletAddress', targetAddress);
+      params.append('isGuest', isGuest ? 'true' : 'false');
+
+      const res = await fetch(`/api/console?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.files) {
@@ -249,11 +255,10 @@ export default function CareCirclePage() {
     } catch (err) {
       console.warn('Could not fetch console stats:', err);
     }
-  };
+  }, [isGuestMode, suiAccount?.address]);
 
   useEffect(() => {
     fetchVaultStats();
-    fetchConsoleStats();
 
     // Restore saved wallet & wallet-keyed profile from localStorage
     try {
@@ -273,10 +278,12 @@ export default function CareCirclePage() {
           saveWalletProfile(blank);
           setUserProfile(blank);
         }
+        fetchConsoleStats(parsedWallet.address, false);
       } else {
         // No wallet connected — start in guest mode with demo profile
         setIsGuestMode(true);
         setUserProfile(DEMO_USER_PROFILE);
+        fetchConsoleStats(undefined, true);
       }
       const savedCal = localStorage.getItem('walcare_calendar_items');
       if (savedCal) {
@@ -589,12 +596,24 @@ export default function CareCirclePage() {
               userProfile={userProfile}
               suiAccount={suiAccount}
               isGuestMode={isGuestMode}
-              onSwitchToGuest={() => setIsGuestMode(true)}
+              onSwitchToGuest={() => {
+                setIsGuestMode(true);
+                setUserProfile(DEMO_USER_PROFILE);
+                fetchConsoleStats(undefined, true);
+              }}
             />
           </div>
         )}
 
-        {activeTab === 'reports' && <ConsoleVault />}
+        {activeTab === 'reports' && (
+          <ConsoleVault
+            suiAccount={suiAccount}
+            isGuestMode={isGuestMode}
+            userProfile={userProfile}
+            onStatsUpdated={(count) => setTotalDocs(count)}
+            onOpenWalletModal={() => setIsWalletModalOpen(true)}
+          />
+        )}
 
         {activeTab === 'calendar' && (
           <div className="flex-1 p-6 sm:p-8 overflow-y-auto max-w-5xl mx-auto space-y-6">
@@ -828,9 +847,23 @@ export default function CareCirclePage() {
 
         {activeTab === 'vault' && <MemoryVault onRefreshMemories={fetchVaultStats} />}
 
-        {activeTab === 'console' && <ConsoleVault />}
+        {activeTab === 'console' && (
+          <ConsoleVault
+            suiAccount={suiAccount}
+            isGuestMode={isGuestMode}
+            userProfile={userProfile}
+            onStatsUpdated={(count) => setTotalDocs(count)}
+            onOpenWalletModal={() => setIsWalletModalOpen(true)}
+          />
+        )}
 
-        {activeTab === 'handover' && <HandoverView />}
+        {activeTab === 'handover' && (
+          <HandoverView
+            suiAccount={suiAccount}
+            isGuestMode={isGuestMode}
+            userProfile={userProfile}
+          />
+        )}
 
         {activeTab === 'settings' && <SettingsView />}
       </main>
@@ -855,6 +888,7 @@ export default function CareCirclePage() {
             setUserProfile(blank);
           }
 
+          fetchConsoleStats(acc.address, false);
           setIsWalletModalOpen(false);
           // Navigate to profile so user can fill in their health data
           setActiveTab('profile');
@@ -865,10 +899,12 @@ export default function CareCirclePage() {
           localStorage.removeItem('walcare_sui_account');
           // Revert to demo profile for guest experience
           setUserProfile(DEMO_USER_PROFILE);
+          fetchConsoleStats(undefined, true);
         }}
         onContinueGuest={() => {
           setIsGuestMode(true);
           setIsWalletModalOpen(false);
+          fetchConsoleStats(undefined, true);
         }}
         onOpenProfile={() => setActiveTab('profile')}
       />
