@@ -81,6 +81,62 @@ export function WalletModal({
   const [isScanning, setIsScanning] = useState(false);
 
   /**
+   * Strictly validates whether a wallet extension genuinely supports the Sui blockchain.
+   * Excludes Solana/Ethereum-only extensions like Phantom, Solflare, MetaMask, OKX (non-Sui), etc.
+   * Recognizes Slush (Mysten Labs official Sui wallet, formerly Sui Wallet) and Surf Wallet.
+   */
+  const isSuiWallet = (sw: any): boolean => {
+    if (!sw) return false;
+    const name = (sw.name || '').toLowerCase();
+
+    // 1. Strict Exclusion: Block known non-Sui extensions that emit standard events
+    if (
+      name.includes('phantom') ||
+      name.includes('solflare') ||
+      name.includes('backpack') ||
+      name.includes('metamask') ||
+      name.includes('rabby') ||
+      name.includes('keplr') ||
+      name.includes('coinbase') ||
+      name.includes('trust wallet') ||
+      name.includes('exodus') ||
+      name.includes('zerion')
+    ) {
+      return false;
+    }
+
+    // 2. Check if wallet specifically supports any sui:* chain
+    const chains: string[] = Array.isArray(sw.chains) ? sw.chains : [];
+    const hasSuiChain = chains.some((c) => typeof c === 'string' && c.startsWith('sui:'));
+
+    // 3. Check if wallet implements any Sui Wallet Standard feature
+    const features = sw.features || {};
+    const hasSuiFeature = Object.keys(features).some((f) => f.startsWith('sui:'));
+
+    // 4. Known dedicated Sui wallets (Slush is the official rebranded Sui Wallet by Mysten Labs)
+    const isKnownSuiWallet =
+      name.includes('slush') ||
+      name.includes('sui wallet') ||
+      name.includes('suiet') ||
+      name.includes('surf') ||
+      name.includes('martian sui') ||
+      name.includes('nightly') ||
+      name.includes('ethos');
+
+    // Reject multi-chain wallets (like generic OKX) if they don't explicitly implement Sui standard
+    if (name.includes('okx') && !hasSuiChain && !hasSuiFeature) {
+      return false;
+    }
+
+    // Only accept if it has Sui chains, Sui features, or is a dedicated Sui wallet
+    if (hasSuiChain || hasSuiFeature || isKnownSuiWallet) {
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
    * Scan for browser extensions adhering to Sui Wallet Standard & window globals
    */
   const scanBrowserWallets = React.useCallback(() => {
@@ -96,13 +152,20 @@ export function WalletModal({
         console.warn('Sui Wallet Standard discovery notice:', e);
       }
 
-      // Base known wallets
+      // Base known Sui wallets
       const baseOptions: WalletOption[] = [
         {
-          id: 'sui_wallet',
-          name: 'Sui Wallet (Official)',
+          id: 'slush',
+          name: 'Slush (Official Sui)',
           installUrl: 'https://chromewebstore.google.com/detail/sui-wallet/opcgpfmipidbgpenhmajoajpbobppdil',
-          description: 'Mysten Labs official wallet for Sui & Walrus',
+          description: 'Mysten Labs official wallet for Sui & Walrus (formerly Sui Wallet)',
+          isDetected: false,
+        },
+        {
+          id: 'surf',
+          name: 'Surf Wallet',
+          installUrl: 'https://surf.tech',
+          description: 'Smart self-custody Sui wallet extension',
           isDetected: false,
         },
         {
@@ -116,27 +179,23 @@ export function WalletModal({
           id: 'nightly',
           name: 'Nightly Wallet',
           installUrl: 'https://nightly.app',
-          description: 'Multi-chain Web3 wallet for Sui ecosystem',
-          isDetected: false,
-        },
-        {
-          id: 'okx',
-          name: 'OKX Wallet',
-          installUrl: 'https://www.okx.com/web3',
-          description: 'OKX Web3 Wallet with Sui support',
+          description: 'Multi-chain Web3 wallet with Sui native support',
           isDetected: false,
         },
       ];
 
       // 1. Cross-check base options with Sui Wallet Standard & window properties
       for (const opt of baseOptions) {
-        // Standard registry check
+        // Standard registry check (filtered strictly for genuine Sui)
         const matchedStd = standardWallets.find((sw) => {
+          if (!isSuiWallet(sw)) return false;
           const swName = (sw.name || '').toLowerCase();
-          if (opt.id === 'sui_wallet') return swName.includes('sui wallet') || swName === 'sui';
+          if (opt.id === 'slush') {
+            return swName.includes('slush') || swName.includes('sui wallet') || swName === 'sui';
+          }
+          if (opt.id === 'surf') return swName.includes('surf');
           if (opt.id === 'suiet') return swName.includes('suiet');
           if (opt.id === 'nightly') return swName.includes('nightly');
-          if (opt.id === 'okx') return swName.includes('okx');
           return false;
         });
 
@@ -148,10 +207,14 @@ export function WalletModal({
         }
 
         // Window object check
-        if (opt.id === 'sui_wallet' && (w.suiWallet || w.__sui__)) {
+        if (opt.id === 'slush' && (w.slush || w.suiWallet || w.__sui__)) {
           opt.isDetected = true;
-          opt.windowObj = w.suiWallet || w.__sui__;
-          opt.icon = (w.suiWallet || w.__sui__)?.icon;
+          opt.windowObj = w.slush || w.suiWallet || w.__sui__;
+          opt.icon = (w.slush || w.suiWallet || w.__sui__)?.icon;
+        } else if (opt.id === 'surf' && (w.surf || w.surfWallet)) {
+          opt.isDetected = true;
+          opt.windowObj = w.surf || w.surfWallet;
+          opt.icon = (w.surf || w.surfWallet)?.icon;
         } else if (opt.id === 'suiet' && w.suiet) {
           opt.isDetected = true;
           opt.windowObj = w.suiet;
@@ -160,17 +223,20 @@ export function WalletModal({
           opt.isDetected = true;
           opt.windowObj = w.nightly?.sui;
           opt.icon = w.nightly?.sui?.icon;
-        } else if (opt.id === 'okx' && w.okxwallet?.sui) {
-          opt.isDetected = true;
-          opt.windowObj = w.okxwallet?.sui;
-          opt.icon = w.okxwallet?.sui?.icon;
         }
       }
 
-      // 2. Discover any additional Standard Wallets installed in the user's browser
+      // 2. Discover any additional genuine Sui Wallets installed in the user's browser (e.g. Martian Sui)
       for (const sw of standardWallets) {
+        if (!isSuiWallet(sw)) continue; // STRICT FILTER: Excludes Phantom, OKX (non-sui), Solflare, etc.
+
+        const swName = (sw.name || '').toLowerCase();
         const alreadyIncluded = baseOptions.some(
-          (b) => b.standardWallet === sw || b.name.toLowerCase() === (sw.name || '').toLowerCase()
+          (b) =>
+            b.standardWallet === sw ||
+            b.name.toLowerCase() === swName ||
+            (b.id === 'slush' && (swName.includes('slush') || swName.includes('sui wallet'))) ||
+            (b.id === 'surf' && swName.includes('surf'))
         );
         if (!alreadyIncluded && sw.name) {
           baseOptions.unshift({
@@ -279,15 +345,24 @@ export function WalletModal({
 
       // 3. Fallback: probe window dynamically in real-time
       const w = window as any;
-      if (option.id === 'sui_wallet') {
-        const ext = w.suiWallet || w.__sui__;
+      if (option.id === 'slush' || option.id === 'sui_wallet') {
+        const ext = w.slush || w.suiWallet || w.__sui__;
         if (ext) {
           if (typeof ext.requestPermissions === 'function') await ext.requestPermissions();
           const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : [];
           if (accounts?.[0]) {
-            await finalizeLogin(accounts[0], 'Sui Wallet', 'extension');
+            await finalizeLogin(accounts[0]?.address || accounts[0], 'Slush Wallet', 'extension');
             return;
           }
+        }
+      } else if (option.id === 'surf' && (w.surf || w.surfWallet)) {
+        const ext = w.surf || w.surfWallet;
+        if (typeof ext.connect === 'function') await ext.connect();
+        const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : ext.accounts;
+        const address = accounts?.[0]?.address || accounts?.[0];
+        if (address) {
+          await finalizeLogin(address, 'Surf Wallet', 'extension');
+          return;
         }
       } else if (option.id === 'suiet' && w.suiet) {
         await w.suiet.connect();
@@ -415,20 +490,20 @@ export function WalletModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-[#12151E] border border-slate-200 dark:border-white/10 shadow-2xl p-6 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative w-full max-w-md sm:max-w-lg max-h-[90vh] sm:max-h-[85vh] flex flex-col rounded-3xl bg-white dark:bg-[#12151E] border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden my-auto">
         {/* Ambient Top Glow */}
-        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-rose-500" />
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-rose-500 z-10" />
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-white/10">
+        <div className="flex items-center justify-between p-5 pb-3.5 border-b border-slate-100 dark:border-white/10 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/25">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/25 shrink-0">
               <Wallet className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug">
                 {account ? 'Sui Wallet Authenticated' : 'Connect Sui Blockchain Wallet'}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -439,14 +514,14 @@ export function WalletModal({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="mt-4 space-y-4">
+        <div className="p-5 pt-3.5 overflow-y-auto flex-1 space-y-3.5 scrollbar-thin">
           {account ? (
             /* Connected State */
             <div className="space-y-4">
@@ -629,7 +704,7 @@ export function WalletModal({
                   </div>
 
                   {/* Wallet Cards List */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
                     {walletList.map((wallet) => (
                       <button
                         key={wallet.id}
