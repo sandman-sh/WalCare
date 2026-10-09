@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  :root {
+    --bg-page: #f4f6fa;
+    --text-primary: #0f172a;
+    --text-secondary: #64748b;
+    --card-surface: #ffffff;
+    --card-surface-subtle: #f8fafc;
+    --card-border: rgba(226, 232, 240, 0.9);
+    --sidebar-surface: #12151e;
+  }
+
+  :root.dark,
+  [data-theme="dark"],
+  .dark {
+    --bg-page: #0b0d14;
+    --text-primary: #ffffff;
+    --text-secondary: #94a3b8;
+    --card-surface: #141722;
+    --card-surface-subtle: #191d2b;
+    --card-border: rgba(255, 255, 255, 0.08);
+    --sidebar-surface: #12151e;
+  }
+
+  :root.light,
+  [data-theme="light"],
+  .light {
+    --bg-page: #f4f6fa;
+    --text-primary: #0f172a;
+    --text-secondary: #64748b;
+    --card-surface: #ffffff;
+    --card-surface-subtle: #f8fafc;
+    --card-border: rgba(226, 232, 240, 0.9);
+    --sidebar-surface: #12151e;
+  }
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* WalCare Organic Tab Inverted Curve */
+.vita-tab-active {
+  position: relative;
+  background-color: var(--bg-page) !important;
+  color: var(--text-primary) !important;
+  border-top-left-radius: 1.25rem;
+  border-bottom-left-radius: 1.25rem;
+}
+
+.vita-tab-active::before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border-bottom-right-radius: 20px;
+  box-shadow: 10px 10px 0 10px var(--bg-page);
+  pointer-events: none;
+}
+
+.vita-tab-active::after {
+  content: "";
+  position: absolute;
+  bottom: -20px;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border-top-right-radius: 20px;
+  box-shadow: 10px -10px 0 10px var(--bg-page);
+  pointer-events: none;
+}
+
+/* Transparent Medical Visualizer Asset Styling */
+.med-asset-blend {
+  mix-blend-mode: normal;
+  filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.35));
+}
+
+.dark .med-asset-blend {
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.8));
+}
+
+/* Pulsing Biometric Beacons */
+@keyframes beaconPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.75);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 16px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.beacon-pulse {
+  animation: beaconPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes beaconPulseAmber {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.75);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 16px rgba(245, 158, 11, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.beacon-pulse-amber {
+  animation: beaconPulseAmber 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes beaconPulseCyan {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.75);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 16px rgba(6, 182, 212, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0);
+  }
+}
+
+.beacon-pulse-cyan {
+  animation: beaconPulseCyan 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes beaconPulseViolet {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.75);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 16px rgba(168, 85, 247, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0);
+  }
+}
+
+.beacon-pulse-violet {
+  animation: beaconPulseViolet 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Dynamic ECG Waveform Animation */
+@keyframes ecgMove {
+  0% {
+    stroke-dashoffset: 120;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ecg-path {
+  stroke-dasharray: 120;
+  animation: ecgMove var(--ecg-duration, 2.2s) linear infinite;
+}
+
+/* Custom Sleek Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
