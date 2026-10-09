@@ -21,6 +21,8 @@ import {
   Plus,
 } from 'lucide-react';
 
+import { getWallets } from '@mysten/wallet-standard';
+
 export interface SuiAccount {
   address: string;
   name: string;
@@ -30,6 +32,17 @@ export interface SuiAccount {
   walrusObjectId: string;
   secretKey?: string;
   walletType?: 'extension' | 'web_keypair' | 'imported';
+}
+
+interface WalletOption {
+  id: string;
+  name: string;
+  icon?: string;
+  isDetected: boolean;
+  standardWallet?: any;
+  windowObj?: any;
+  installUrl: string;
+  description: string;
 }
 
 interface WalletModalProps {
@@ -63,19 +76,153 @@ export function WalletModal({
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [showSecretKey, setShowSecretKey] = useState(false);
 
-  // Detected Browser Extensions
-  const [hasSuiWalletExt, setHasSuiWalletExt] = useState(false);
-  const [hasSuietExt, setHasSuietExt] = useState(false);
-  const [hasNightlyExt, setHasNightlyExt] = useState(false);
+  // Dynamic Browser Wallets
+  const [walletList, setWalletList] = useState<WalletOption[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+
+  /**
+   * Scan for browser extensions adhering to Sui Wallet Standard & window globals
+   */
+  const scanBrowserWallets = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    setIsScanning(true);
+    try {
+      const w = window as any;
+      let standardWallets: readonly any[] = [];
+      try {
+        const registry = getWallets();
+        standardWallets = registry.get() || [];
+      } catch (e) {
+        console.warn('Sui Wallet Standard discovery notice:', e);
+      }
+
+      // Base known wallets
+      const baseOptions: WalletOption[] = [
+        {
+          id: 'sui_wallet',
+          name: 'Sui Wallet (Official)',
+          installUrl: 'https://chromewebstore.google.com/detail/sui-wallet/opcgpfmipidbgpenhmajoajpbobppdil',
+          description: 'Mysten Labs official wallet for Sui & Walrus',
+          isDetected: false,
+        },
+        {
+          id: 'suiet',
+          name: 'Suiet Wallet',
+          installUrl: 'https://suiet.app',
+          description: 'Community-first Sui browser wallet extension',
+          isDetected: false,
+        },
+        {
+          id: 'nightly',
+          name: 'Nightly Wallet',
+          installUrl: 'https://nightly.app',
+          description: 'Multi-chain Web3 wallet for Sui ecosystem',
+          isDetected: false,
+        },
+        {
+          id: 'okx',
+          name: 'OKX Wallet',
+          installUrl: 'https://www.okx.com/web3',
+          description: 'OKX Web3 Wallet with Sui support',
+          isDetected: false,
+        },
+      ];
+
+      // 1. Cross-check base options with Sui Wallet Standard & window properties
+      for (const opt of baseOptions) {
+        // Standard registry check
+        const matchedStd = standardWallets.find((sw) => {
+          const swName = (sw.name || '').toLowerCase();
+          if (opt.id === 'sui_wallet') return swName.includes('sui wallet') || swName === 'sui';
+          if (opt.id === 'suiet') return swName.includes('suiet');
+          if (opt.id === 'nightly') return swName.includes('nightly');
+          if (opt.id === 'okx') return swName.includes('okx');
+          return false;
+        });
+
+        if (matchedStd) {
+          opt.isDetected = true;
+          opt.standardWallet = matchedStd;
+          opt.icon = matchedStd.icon;
+          continue;
+        }
+
+        // Window object check
+        if (opt.id === 'sui_wallet' && (w.suiWallet || w.__sui__)) {
+          opt.isDetected = true;
+          opt.windowObj = w.suiWallet || w.__sui__;
+          opt.icon = (w.suiWallet || w.__sui__)?.icon;
+        } else if (opt.id === 'suiet' && w.suiet) {
+          opt.isDetected = true;
+          opt.windowObj = w.suiet;
+          opt.icon = w.suiet?.icon;
+        } else if (opt.id === 'nightly' && w.nightly?.sui) {
+          opt.isDetected = true;
+          opt.windowObj = w.nightly?.sui;
+          opt.icon = w.nightly?.sui?.icon;
+        } else if (opt.id === 'okx' && w.okxwallet?.sui) {
+          opt.isDetected = true;
+          opt.windowObj = w.okxwallet?.sui;
+          opt.icon = w.okxwallet?.sui?.icon;
+        }
+      }
+
+      // 2. Discover any additional Standard Wallets installed in the user's browser
+      for (const sw of standardWallets) {
+        const alreadyIncluded = baseOptions.some(
+          (b) => b.standardWallet === sw || b.name.toLowerCase() === (sw.name || '').toLowerCase()
+        );
+        if (!alreadyIncluded && sw.name) {
+          baseOptions.unshift({
+            id: sw.name.toLowerCase().replace(/\s+/g, '_'),
+            name: sw.name,
+            icon: sw.icon,
+            isDetected: true,
+            standardWallet: sw,
+            installUrl: 'https://sui.io',
+            description: 'Sui Wallet Standard detected extension',
+          });
+        }
+      }
+
+      // Sort: detected wallets first
+      baseOptions.sort((a, b) => (b.isDetected ? 1 : 0) - (a.isDetected ? 1 : 0));
+      setWalletList(baseOptions);
+    } finally {
+      setTimeout(() => setIsScanning(false), 300);
+    }
+  }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const w = window as any;
-      setHasSuiWalletExt(!!w.suiWallet || !!w.__sui__);
-      setHasSuietExt(!!w.suiet);
-      setHasNightlyExt(!!w.nightly?.sui);
-    }
-  }, [isOpen]);
+    if (!isOpen) return;
+
+    scanBrowserWallets();
+
+    // Listen to wallet-standard registration events
+    let unsubReg: (() => void) | undefined;
+    let unsubUnreg: (() => void) | undefined;
+    try {
+      const registry = getWallets();
+      unsubReg = registry.on('register', () => scanBrowserWallets());
+      unsubUnreg = registry.on('unregister', () => scanBrowserWallets());
+    } catch (e) {}
+
+    // Emit app-ready event so newly injected extensions announce themselves
+    try {
+      window.dispatchEvent(new CustomEvent('wallet-standard:app-ready'));
+    } catch (e) {}
+
+    // Poll for 2.5s to capture late content scripts
+    const interval = setInterval(scanBrowserWallets, 350);
+    const timeout = setTimeout(() => clearInterval(interval), 2500);
+
+    return () => {
+      if (unsubReg) unsubReg();
+      if (unsubUnreg) unsubUnreg();
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [isOpen, scanBrowserWallets]);
 
   if (!isOpen) return null;
 
@@ -91,58 +238,77 @@ export function WalletModal({
   };
 
   /**
-   * Connect to real browser extension (Sui Wallet / Suiet / Nightly)
+   * Connect to real browser extension using Sui Wallet Standard or window injection
    */
-  const handleConnectExtension = async (walletId: string) => {
+  const handleConnectExtension = async (option: WalletOption) => {
     setIsConnecting(true);
-    setStatusMessage('Requesting connection from browser extension...');
+    setStatusMessage(`Requesting connection with ${option.name}...`);
     try {
-      const w = window as any;
-
-      if (walletId === 'sui_wallet') {
-        const ext = w.suiWallet || w.__sui__;
-        if (!ext) {
-          window.open('https://chromewebstore.google.com/detail/sui-wallet/opcgpfmipidbgpenhmajoajpbobppdil', '_blank');
-          setStatusMessage('Sui Wallet extension not detected. Opening Chrome Web Store...');
-          setIsConnecting(false);
+      // 1. Prioritize Sui Wallet Standard
+      if (option.standardWallet) {
+        const connectFeature = option.standardWallet.features?.['standard:connect'];
+        if (connectFeature) {
+          const res = await connectFeature.connect();
+          const accounts = res?.accounts || option.standardWallet.accounts || [];
+          if (!accounts || accounts.length === 0) {
+            throw new Error(`No account authorized in ${option.name}. Please approve the connection in the extension.`);
+          }
+          const address = accounts[0].address;
+          await finalizeLogin(address, option.name, 'extension');
           return;
         }
+      }
 
+      // 2. Direct window object connection
+      if (option.windowObj) {
+        const ext = option.windowObj;
         if (typeof ext.requestPermissions === 'function') {
           await ext.requestPermissions();
-        }
-        const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : [];
-        if (!accounts || accounts.length === 0) {
-          throw new Error('No accounts selected or approved in Sui Wallet extension.');
+        } else if (typeof ext.connect === 'function') {
+          await ext.connect();
         }
 
-        const address = accounts[0];
-        await finalizeLogin(address, 'Sui Wallet Extension', 'extension');
-      } else if (walletId === 'suiet') {
-        const ext = w.suiet;
-        if (!ext) {
-          window.open('https://suiet.app', '_blank');
-          setStatusMessage('Suiet extension not detected. Opening Suiet site...');
-          setIsConnecting(false);
-          return;
+        const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : ext.accounts;
+        const address = accounts?.[0]?.address || accounts?.[0] || ext.account?.address;
+        if (!address) {
+          throw new Error(`Could not retrieve account address from ${option.name}.`);
         }
-        await ext.connect();
-        const address = ext.account?.address || (await ext.getAccounts())?.[0];
-        if (!address) throw new Error('Could not retrieve account address from Suiet.');
-        await finalizeLogin(address, 'Suiet Wallet', 'extension');
-      } else if (walletId === 'nightly') {
-        const ext = w.nightly?.sui;
-        if (!ext) {
-          window.open('https://nightly.app', '_blank');
-          setIsConnecting(false);
-          return;
-        }
-        await ext.connect();
-        const accounts = await ext.getAccounts();
-        const address = accounts[0]?.address || accounts[0];
-        if (!address) throw new Error('Could not retrieve account from Nightly.');
-        await finalizeLogin(address, 'Nightly Wallet', 'extension');
+        await finalizeLogin(address, option.name, 'extension');
+        return;
       }
+
+      // 3. Fallback: probe window dynamically in real-time
+      const w = window as any;
+      if (option.id === 'sui_wallet') {
+        const ext = w.suiWallet || w.__sui__;
+        if (ext) {
+          if (typeof ext.requestPermissions === 'function') await ext.requestPermissions();
+          const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : [];
+          if (accounts?.[0]) {
+            await finalizeLogin(accounts[0], 'Sui Wallet', 'extension');
+            return;
+          }
+        }
+      } else if (option.id === 'suiet' && w.suiet) {
+        await w.suiet.connect();
+        const address = w.suiet.account?.address || (await w.suiet.getAccounts())?.[0];
+        if (address) {
+          await finalizeLogin(address, 'Suiet Wallet', 'extension');
+          return;
+        }
+      } else if (option.id === 'nightly' && w.nightly?.sui) {
+        await w.nightly.sui.connect();
+        const accounts = await w.nightly.sui.getAccounts();
+        const address = accounts?.[0]?.address || accounts?.[0];
+        if (address) {
+          await finalizeLogin(address, 'Nightly Wallet', 'extension');
+          return;
+        }
+      }
+
+      // If extension not present, redirect to download
+      window.open(option.installUrl, '_blank');
+      setStatusMessage(`${option.name} extension not detected. Opening Chrome Web Store...`);
     } catch (err: any) {
       console.error('Wallet connection error:', err);
       setStatusMessage(`Connection failed: ${err.message || 'User rejected request'}`);
@@ -444,99 +610,93 @@ export function WalletModal({
 
               {/* TAB 1: Browser Extensions */}
               {activeTab === 'extensions' && (
-                <div className="space-y-2.5">
-                  {/* Official Sui Wallet */}
-                  <button
-                    onClick={() => handleConnectExtension('sui_wallet')}
-                    disabled={isConnecting}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-black text-sm shadow-md">
-                        S
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
-                            Sui Wallet (Official)
-                          </span>
-                          {hasSuiWalletExt ? (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                              Detected in Browser
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400">
-                              Mysten Labs
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {hasSuiWalletExt
-                            ? 'Ready to connect via Sui Wallet Standard'
-                            : 'Install from Chrome Web Store or click to download'}
-                        </p>
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
-                  </button>
+                <div className="space-y-3">
+                  {/* Scan bar / status banner */}
+                  <div className="flex items-center justify-between px-1 text-xs">
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-cyan-500" />
+                      Sui Wallet Standard (Auto-Discovery)
+                    </span>
+                    <button
+                      onClick={scanBrowserWallets}
+                      disabled={isScanning}
+                      className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 font-bold cursor-pointer disabled:opacity-50"
+                      title="Rescan browser for newly installed extensions"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
+                      <span>{isScanning ? 'Scanning...' : 'Rescan'}</span>
+                    </button>
+                  </div>
 
-                  {/* Suiet Wallet */}
-                  <button
-                    onClick={() => handleConnectExtension('suiet')}
-                    disabled={isConnecting}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md">
-                        Su
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            Suiet Wallet
-                          </span>
-                          {hasSuietExt && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                              Detected
-                            </span>
-                          )}
+                  {/* Wallet Cards List */}
+                  <div className="space-y-2">
+                    {walletList.map((wallet) => (
+                      <button
+                        key={wallet.id}
+                        onClick={() => handleConnectExtension(wallet)}
+                        disabled={isConnecting}
+                        className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left cursor-pointer group ${
+                          wallet.isDetected
+                            ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/40 hover:border-emerald-500/70 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/15 ring-1 ring-emerald-500/20'
+                            : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border-slate-200 dark:border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-md shrink-0 ${
+                            wallet.isDetected
+                              ? 'bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/20'
+                              : 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-cyan-500/20'
+                          }`}>
+                            {wallet.icon ? (
+                              <img src={wallet.icon} alt={wallet.name} className="w-6 h-6 rounded-lg object-contain" />
+                            ) : (
+                              wallet.name.slice(0, 2).toUpperCase()
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                                {wallet.name}
+                              </span>
+                              {wallet.isDetected ? (
+                                <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 animate-pulse">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  Detected &amp; Ready
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400">
+                                  Extension
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {wallet.isDetected
+                                ? 'Click to connect wallet securely via Sui Standard'
+                                : wallet.description}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Community-first Sui browser wallet extension
-                        </p>
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
-                  </button>
 
-                  {/* Nightly Wallet */}
-                  <button
-                    onClick={() => handleConnectExtension('nightly')}
-                    disabled={isConnecting}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-all text-left cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 to-pink-600 flex items-center justify-center text-white font-black text-sm shadow-md">
-                        N
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                            Nightly Wallet
-                          </span>
-                          {hasNightlyExt && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                              Detected
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Multi-chain wallet for Sui and decentralized apps
-                        </p>
-                      </div>
-                    </div>
-                    <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
-                  </button>
+                        {wallet.isDetected ? (
+                          <div className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-[11px] font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                            Connect
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-[11px] text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors shrink-0">
+                            <span>Get</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
+                    <Zap className="w-4 h-4 text-cyan-500 shrink-0 mt-0.5" />
+                    <span>
+                      Don&apos;t have a browser extension installed? Use <strong>Create New Wallet</strong> to generate a live on-chain Sui keypair in 1 click right in your browser!
+                    </span>
+                  </div>
                 </div>
               )}
 

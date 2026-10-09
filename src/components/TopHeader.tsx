@@ -48,17 +48,17 @@ export function TopHeader({
   return (
     <header className="h-16 px-4 sm:px-8 bg-white/80 dark:bg-[#12151E]/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-white/5 flex items-center justify-between sticky top-0 z-20 transition-colors">
       {/* Left: Mobile Toggle + Title */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenMobileMenu}
-          className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 md:hidden cursor-pointer transition-colors"
+          className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 md:hidden cursor-pointer transition-colors shrink-0"
           aria-label="Open navigation menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3">
-          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+        <div className="flex items-center gap-3 min-w-0">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight truncate">
             {title}
           </h2>
 
@@ -66,7 +66,7 @@ export function TopHeader({
           {userProfile && (
             <button
               onClick={onOpenProfile}
-              className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
+              className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer shrink-0"
               title="Click to view & edit patient profile"
             >
               <div className="w-5 h-5 rounded-full overflow-hidden bg-purple-600 flex items-center justify-center shrink-0">
@@ -80,7 +80,7 @@ export function TopHeader({
             </button>
           )}
 
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 dark:bg-white/5 border border-purple-500/20 dark:border-white/10">
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 dark:bg-white/5 border border-purple-500/20 dark:border-white/10 shrink-0">
             <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Persona:</span>
             <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{activeCaregiver.name}</span>
           </div>
@@ -88,7 +88,7 @@ export function TopHeader({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         {/* Sui Wallet Connect Button */}
         {suiAccount ? (
           <button

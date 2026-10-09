@@ -363,7 +363,7 @@ export default function CareCirclePage() {
   const getTabTitle = () => {
     switch (activeTab) {
       case 'dashboard':
-        return 'WalCare Healthcare • Biometrics & Holographic Body';
+        return 'WalCare Healthcare';
       case 'profile':
         return 'Personal Health Profile • Sui Identity & Biometrics';
       case 'reports':

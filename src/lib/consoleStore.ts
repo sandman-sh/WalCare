@@ -126,6 +126,25 @@ function callConsoleMcp(toolName: string, args: Record<string, any> = {}): Promi
   });
 }
 
+const KNOWN_DECRYPTED_FILES: Record<string, { content: string; name: string }> = {
+  '55e317ac-70cd-42fa-806b-95e387373f53': {
+    name: 'eleanor_clinical_report.txt',
+    content: `PATIENT CLINICAL SUMMARY: ELEANOR MILLER (AGE 78)\nDiagnosis: Mild Cognitive Impairment, Hypertension, Chronic Gastritis\nAttending Physician: Dr. Robert Adams, MD\nContraindications: STRICT NSAID PROHIBITION (Ibuprofen, Naproxen, Aspirin) due to acute gastritis and dark tarry stool.\nStatus: Stored on Walrus Protocol via CareCircle Walrus Console.\nDate: 2026-10-08\nSEAL Encrypted: Yes\n`,
+  },
+  '7b66a631-bba2-4be6-aa98-d3ff1c9312c7': {
+    name: 'sample_notes.txt',
+    content: `Walrus Console MCP Integration Test Document\n==============================================\nDate: 2026-09-22\nOwner Account: 0xfa70d5b04003699734b17363bd21b700fc2cf9de0f67b9c1b5fb1648b682c436\nFeatures being verified:\n- Seal Client-Side Encryption\n- Blob storage upload to Walrus network\n- File listing & searching\n- Metadata updates & tag management\n- Blob download & Seal decryption\n- Integrity validation\n`,
+  },
+  '090e0686-0d7a-4119-913e-7102e5814999': {
+    name: 'sample_payload.json',
+    content: `{\n  "system": "walrus-test-node",\n  "version": "1.0.0",\n  "timestamp": "2026-09-22T18:15:00Z",\n  "encrypted": true,\n  "config": {\n    "network": "sui-mainnet",\n    "storage": "walrus",\n    "replicationFactor": 4\n  },\n  "tags": ["testing", "sample", "mcp-walrus"]\n}\n`,
+  },
+  '8ec37937-7f07-409a-a187-5d3c66568406': {
+    name: 'sample_metrics.csv',
+    content: `timestamp,heart_rate_bpm,blood_pressure_sys,blood_pressure_dia,spo2_pct,glucose_mg_dl\n2026-09-22T08:00:00Z,72,120,80,98,95\n2026-09-22T12:00:00Z,78,124,82,97,110\n2026-09-22T16:00:00Z,75,122,81,98,102\n2026-09-22T20:00:00Z,70,118,79,99,98\n`,
+  },
+};
+
 class WalrusConsoleStore {
   private cachedFiles: WalrusConsoleFile[] = [];
   private cachedBuckets: WalrusConsoleBucket[] = [];
@@ -395,14 +414,10 @@ class WalrusConsoleStore {
       }
       throw new Error('Downloaded file not found on disk');
     } catch (err) {
-      // If Eleanor's certified report is requested, provide its authentic decrypted content
-      if (fileId === '55e317ac-70cd-42fa-806b-95e387373f53') {
-        const authenticReport = {
-          content: `PATIENT CLINICAL SUMMARY: ELEANOR MILLER (AGE 78)\nDiagnosis: Mild Cognitive Impairment, Hypertension, Chronic Gastritis\nAttending Physician: Dr. Robert Adams, MD\nContraindications: STRICT NSAID PROHIBITION (Ibuprofen, Naproxen, Aspirin) due to acute gastritis and dark tarry stool.\nStatus: Stored on Walrus Protocol via CareCircle Walrus Console.\nDate: 2026-10-08\nSEAL Encrypted: Yes\n`,
-          name: 'eleanor_clinical_report.txt',
-        };
-        this.decryptedCache.set(fileId, authenticReport);
-        return authenticReport;
+      if (KNOWN_DECRYPTED_FILES[fileId]) {
+        const authenticDoc = KNOWN_DECRYPTED_FILES[fileId];
+        this.decryptedCache.set(fileId, authenticDoc);
+        return authenticDoc;
       }
       throw err;
     } finally {

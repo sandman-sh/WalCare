@@ -21,15 +21,10 @@ export async function GET(req: NextRequest) {
         });
       } catch (dlErr: any) {
         console.error('Download error via Seal:', dlErr);
-        // Fallback with authenticated medical certificate if decryption engine is busy
-        const files = await consoleStore.getFiles(bucketId);
-        const file = files.find((f) => f.id === fileId);
-        const fallbackContent = `=== WALRUS CONSOLE DECENTRALIZED DOCUMENT ===\nFile: ${file?.name || fileId}\nBlob ID: ${file?.blobId || 'N/A'}\nObject ID: ${file?.pooledBlobObjectId || 'N/A'}\nStatus: Certified On-Chain (Walrus Protocol + Sui)\nTimestamp: ${file?.createdAt || new Date().toISOString()}\n============================================\n\nEncrypted Medical Record payload verified on Walrus Console.`;
-        return new NextResponse(fallbackContent, {
-          status: 200,
+        return new NextResponse(`Error decrypting document: ${dlErr?.message || 'Decryption key unavailable for this Walrus Console object'}. Please ensure local SEAL private key is configured.`, {
+          status: 500,
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
-            'Content-Disposition': `attachment; filename="${file?.name || 'document.txt'}"`,
           },
         });
       }
