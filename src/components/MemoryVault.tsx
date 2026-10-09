@@ -12,17 +12,31 @@ import {
   Sparkles,
   CheckCircle2,
 } from 'lucide-react';
-import { WalrusMemoryItem, MemoryCategory } from '@/types/carecircle';
+import { WalrusMemoryItem, MemoryCategory, UserProfile } from '@/types/carecircle';
 import { CAREGIVERS, PATIENT_PROFILE } from '@/lib/seedData';
+import { SuiAccount } from './WalletModal';
 
 interface MemoryVaultProps {
   onRefreshMemories: () => void;
+  suiAccount?: SuiAccount | null;
+  isGuestMode?: boolean;
+  userProfile?: UserProfile | null;
 }
 
-export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
+export function MemoryVault({
+  onRefreshMemories,
+  suiAccount,
+  isGuestMode = false,
+  userProfile,
+}: MemoryVaultProps) {
+  const isPersonal = !isGuestMode && !!suiAccount;
+  const patientDisplayName = isPersonal
+    ? (userProfile?.name || `Sui User (${suiAccount.address.slice(0, 6)}...)`)
+    : PATIENT_PROFILE.name;
+
   const [memories, setMemories] = useState<WalrusMemoryItem[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<WalrusMemoryItem[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'daughter' | 'nurse' | 'physio' | 'physician' | 'critical'>('all');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -42,8 +56,15 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
   const fetchMemories = async (query = '') => {
     setIsLoading(true);
     try {
-      const url = query ? `/api/memory?q=${encodeURIComponent(query)}` : '/api/memory';
-      const res = await fetch(url);
+      const params = new URLSearchParams();
+      if (query) params.append('q', query);
+      if (!isGuestMode && suiAccount?.address) {
+        params.append('walletAddress', suiAccount.address);
+        params.append('isGuest', 'false');
+      } else {
+        params.append('isGuest', 'true');
+      }
+      const res = await fetch(`/api/memory?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setMemories(data.memories || []);
@@ -58,25 +79,33 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
 
   useEffect(() => {
     fetchMemories();
-  }, []);
+  }, [isGuestMode, suiAccount?.address]);
 
   useEffect(() => {
     let result = [...memories];
 
-    if (activeFilter === 'daughter') {
-      result = result.filter((m) => m.authorId === 'daughter_sarah');
-    } else if (activeFilter === 'nurse') {
-      result = result.filter((m) => m.authorId === 'nurse_elena');
-    } else if (activeFilter === 'physio') {
-      result = result.filter((m) => m.authorId === 'physio_david');
-    } else if (activeFilter === 'physician') {
-      result = result.filter((m) => m.authorId === 'dr_adams');
-    } else if (activeFilter === 'critical') {
-      result = result.filter((m) => m.isSafetyCritical);
+    if (isPersonal) {
+      if (activeFilter === 'critical') {
+        result = result.filter((m) => m.isSafetyCritical);
+      } else if (activeFilter !== 'all') {
+        result = result.filter((m) => m.category === activeFilter);
+      }
+    } else {
+      if (activeFilter === 'daughter') {
+        result = result.filter((m) => m.authorId === 'daughter_sarah');
+      } else if (activeFilter === 'nurse') {
+        result = result.filter((m) => m.authorId === 'nurse_elena');
+      } else if (activeFilter === 'physio') {
+        result = result.filter((m) => m.authorId === 'physio_david');
+      } else if (activeFilter === 'physician') {
+        result = result.filter((m) => m.authorId === 'dr_adams');
+      } else if (activeFilter === 'critical') {
+        result = result.filter((m) => m.isSafetyCritical);
+      }
     }
 
     setFilteredMemories(result);
-  }, [memories, activeFilter]);
+  }, [memories, activeFilter, isPersonal]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,12 +118,20 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
 
     setIsSubmitting(true);
     try {
+      const authorId = isPersonal ? suiAccount.address : newAuthor;
+      const authorName = isPersonal ? (userProfile?.name || 'Account Owner') : undefined;
+      const authorRole = isPersonal ? 'Patient / Account Owner' : undefined;
+
       const res = await fetch('/api/memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: newText,
-          authorId: newAuthor,
+          authorId,
+          authorName,
+          authorRole,
+          walletAddress: isPersonal ? suiAccount.address : undefined,
+          isGuest: isGuestMode,
           category: newCategory,
           isSafetyCritical: newIsCritical,
         }),
@@ -113,6 +150,10 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
     }
   };
 
+  const criticalCount = memories.filter((m) => m.isSafetyCritical).length;
+  const vitalsCount = memories.filter((m) => m.category === 'vitals').length;
+  const otherCount = memories.filter((m) => m.category !== 'vitals').length;
+
   return (
     <div className="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto space-y-6">
       {/* Header Banner */}
@@ -125,13 +166,19 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
               Sui Mainnet Relayer
             </span>
+            {isPersonal && (
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-bold">
+                Wallet-Private Partition
+              </span>
+            )}
           </div>
           <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             Walrus Decentralized Memory Vault
           </h2>
           <p className="text-xs sm:text-sm font-medium text-slate-300 mt-1">
-            Verifiable on-chain clinical memory for patient{' '}
-            <strong className="text-purple-300">{PATIENT_PROFILE.name}</strong> (88yo)
+            Verifiable on-chain clinical memory for{' '}
+            <strong className="text-purple-300">{patientDisplayName}</strong>
+            {isPersonal && userProfile?.age ? ` (${userProfile.age}yo)` : (!isPersonal ? ' (88yo)' : '')}
           </p>
         </div>
 
@@ -161,29 +208,53 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
           <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Walrus Blobs Certified</div>
         </div>
 
-        <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
-          <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Sarah (Daughter)</div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-            {stats.byCaregiver.daughter_sarah}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Morning Vitals & Mood</div>
-        </div>
+        {isPersonal ? (
+          <>
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">Safety Critical</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">{criticalCount}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Contraindications & Flags</div>
+            </div>
 
-        <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
-          <div className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">Elena (Nurse RN)</div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-            {stats.byCaregiver.nurse_elena}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Clinical Meds & Wound</div>
-        </div>
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">Vitals & Biometrics</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">{vitalsCount}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">BP, Pulse, Glucose</div>
+            </div>
 
-        <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
-          <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">David (Physio DPT)</div>
-          <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
-            {stats.byCaregiver.physio_david}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Gait & TUG Scores</div>
-        </div>
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Clinical Logs</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">{otherCount}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Observations & Meds</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Sarah (Daughter)</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
+                {stats.byCaregiver.daughter_sarah}
+              </div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Morning Vitals & Mood</div>
+            </div>
+
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400">Elena (Nurse RN)</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
+                {stats.byCaregiver.nurse_elena}
+              </div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Clinical Meds & Wound</div>
+            </div>
+
+            <div className="p-4 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 shadow-lg">
+              <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">David (Physio DPT)</div>
+              <div className="text-3xl font-black text-slate-900 dark:text-white mt-1">
+                {stats.byCaregiver.physio_david}
+              </div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Gait & TUG Scores</div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -202,15 +273,23 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
 
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {(
-            [
-              { id: 'all', label: 'All Blobs (Multiplayer)' },
-              { id: 'daughter', label: 'Sarah (Family)' },
-              { id: 'nurse', label: 'Elena (Nurse RN)' },
-              { id: 'physio', label: 'David (Physio)' },
-              { id: 'physician', label: 'Dr. Adams (MD)' },
-              { id: 'critical', label: 'Critical Flags' },
-            ] as const
+          {(isPersonal
+            ? [
+                { id: 'all', label: 'All Personal Blobs' },
+                { id: 'critical', label: 'Critical Flags' },
+                { id: 'vitals', label: 'Vitals & Biometrics' },
+                { id: 'medication', label: 'Medications' },
+                { id: 'symptom', label: 'Symptoms' },
+                { id: 'general', label: 'General' },
+              ]
+            : [
+                { id: 'all', label: 'All Blobs (Multiplayer)' },
+                { id: 'daughter', label: 'Sarah (Family)' },
+                { id: 'nurse', label: 'Elena (Nurse RN)' },
+                { id: 'physio', label: 'David (Physio)' },
+                { id: 'physician', label: 'Dr. Adams (MD)' },
+                { id: 'critical', label: 'Critical Flags' },
+              ]
           ).map((f) => {
             const isSelected = activeFilter === f.id;
             return (
@@ -237,8 +316,27 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
             Querying Sui Mainnet & Walrus Memory relayer...
           </div>
         ) : filteredMemories.length === 0 ? (
-          <div className="col-span-2 text-center py-12 text-slate-500 dark:text-slate-400 text-xs">
-            No memories match the filter query.
+          <div className="col-span-2 text-center py-12 px-6 rounded-3xl bg-white dark:bg-[#141722] border border-slate-200 dark:border-white/10 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+              <Database className="w-6 h-6" />
+            </div>
+            <div className="text-sm font-bold text-slate-900 dark:text-white">
+              {isPersonal ? 'No Walrus Memories Yet' : 'No memories match the filter query.'}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              {isPersonal
+                ? `Your private Walrus Memory vault is active. Speak with KIRO AI or click "Add Observation" to store your first verifiable on-chain clinical record.`
+                : 'Try adjusting your search terms or filter selection above.'}
+            </p>
+            {isPersonal && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Record First Observation</span>
+              </button>
+            )}
           </div>
         ) : (
           filteredMemories.map((mem) => {
@@ -326,18 +424,27 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
             <form onSubmit={handleCreateMemory} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Caregiver Persona
+                  {isPersonal ? 'Recorded By (Authenticated User)' : 'Caregiver Persona'}
                 </label>
-                <select
-                  value={newAuthor}
-                  onChange={(e) => setNewAuthor(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-[#141722] border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white focus:outline-none"
-                >
-                  <option value="daughter_sarah">Sarah Miller (Daughter / Family Caregiver)</option>
-                  <option value="nurse_elena">Elena Rostova, RN (Registered Nurse)</option>
-                  <option value="physio_david">David Chen, DPT (Physical Therapist)</option>
-                  <option value="dr_adams">Dr. Robert Adams, MD (Attending Physician)</option>
-                </select>
+                {isPersonal ? (
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#141722] border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white flex items-center justify-between">
+                    <span className="font-bold">{userProfile?.name || 'Account Owner'}</span>
+                    <span className="font-mono text-purple-600 dark:text-purple-400 text-[11px]">
+                      {suiAccount.address.slice(0, 6)}...{suiAccount.address.slice(-4)}
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={newAuthor}
+                    onChange={(e) => setNewAuthor(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-[#141722] border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white focus:outline-none"
+                  >
+                    <option value="daughter_sarah">Sarah Miller (Daughter / Family Caregiver)</option>
+                    <option value="nurse_elena">Elena Rostova, RN (Registered Nurse)</option>
+                    <option value="physio_david">David Chen, DPT (Physical Therapist)</option>
+                    <option value="dr_adams">Dr. Robert Adams, MD (Attending Physician)</option>
+                  </select>
+                )}
               </div>
 
               <div>

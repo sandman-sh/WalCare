@@ -18,8 +18,23 @@ export function MascotHero({ onSelectPrompt, activeCaregiverName, userProfile, i
   const patientDisplayName = isPersonalUser ? (userProfile?.name || 'You') : 'Eleanor Vance';
   const possessive = isPersonalUser ? (userProfile?.name ? `${userProfile.name}'s` : 'my') : 'Eleanor’s';
 
+  const hasNoName = isPersonalUser && (!userProfile?.name || userProfile.name.trim() === '');
+
   const suggestions = isPersonalUser
     ? [
+        ...(hasNoName
+          ? [
+              {
+                icon: <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+                title: 'Set Profile Name',
+                label: 'Tell KIRO your name so it remembers you',
+                prompt: 'Hello KIRO! My name is Alex. Please remember my name and update my profile.',
+                border: 'border-purple-500/40 hover:border-purple-500/70',
+                badge: 'Setup Identity',
+                badgeColor: 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30',
+              },
+            ]
+          : []),
         {
           icon: <Pill className="w-4 h-4 text-rose-500 dark:text-rose-400" />,
           title: 'Safety Contraindication Probe',
@@ -47,15 +62,19 @@ export function MascotHero({ onSelectPrompt, activeCaregiverName, userProfile, i
           badge: 'Walrus Memory',
           badgeColor: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
         },
-        {
-          icon: <Footprints className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
-          title: 'Natural Language Observation Save',
-          label: 'Record that I experienced mild morning fatigue',
-          prompt: 'Remember in Walrus Memory that I experienced mild morning fatigue and needed extra rest after breakfast.',
-          border: 'border-cyan-500/20 hover:border-cyan-500/50',
-          badge: 'Persist to Walrus',
-          badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
-        },
+        ...(!hasNoName
+          ? [
+              {
+                icon: <Footprints className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
+                title: 'Natural Language Observation Save',
+                label: 'Record that I experienced mild morning fatigue',
+                prompt: 'Remember in Walrus Memory that I experienced mild morning fatigue and needed extra rest after breakfast.',
+                border: 'border-cyan-500/20 hover:border-cyan-500/50',
+                badge: 'Persist to Walrus',
+                badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
+              },
+            ]
+          : []),
       ]
     : [
         {
@@ -140,9 +159,36 @@ export function MascotHero({ onSelectPrompt, activeCaregiverName, userProfile, i
         </h1>
 
         <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm font-medium max-w-xl mx-auto mt-2 leading-relaxed">
-          I am <span className="text-purple-600 dark:text-purple-300 font-bold">KIRO</span>. Connected to {isPersonalUser ? 'your' : `${patientDisplayName}’s`} decentralized Walrus Memory vault on Sui. Speak naturally to update vitals, check drug contraindications, or record clinical observations.
+          {hasNoName ? (
+            <>
+              Welcome! I am <span className="text-purple-600 dark:text-purple-300 font-bold">KIRO</span>. Connected to your private Walrus Memory vault on Sui. <span className="text-rose-600 dark:text-rose-400 font-bold">Please tell me your name</span> (e.g. <em>&ldquo;My name is Alex&rdquo;</em>) or configure your identity in the Profile tab so I can address and remember you properly.
+            </>
+          ) : (
+            <>
+              I am <span className="text-purple-600 dark:text-purple-300 font-bold">KIRO</span>. Connected to {isPersonalUser ? `${userProfile?.name ? `${userProfile.name}'s` : 'your'}` : `${patientDisplayName}’s`} decentralized Walrus Memory vault on Sui. Speak naturally to update vitals, check drug contraindications, or record clinical observations.
+            </>
+          )}
         </p>
       </div>
+
+      {/* Banner for new users without configured name */}
+      {hasNoName && (
+        <div className="w-full max-w-xl p-3.5 rounded-2xl bg-gradient-to-r from-purple-500/15 via-rose-500/10 to-indigo-500/15 border border-purple-500/30 flex items-center justify-between gap-3 text-left">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">👋</span>
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">Profile Name Not Set Yet</div>
+              <div className="text-[11px] text-slate-600 dark:text-slate-400">Tell KIRO your name in chat or configure it in the Profile tab.</div>
+            </div>
+          </div>
+          <button
+            onClick={() => onSelectPrompt('Hello KIRO! My name is ')}
+            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shrink-0 cursor-pointer transition-all shadow-md"
+          >
+            Introduce Yourself
+          </button>
+        </div>
+      )}
 
       {/* Clinical Scenario Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full max-w-3xl text-left pt-2">

@@ -1,4 +1,4 @@
-import { WalrusMemoryItem } from '@/types/carecircle';
+import { WalrusMemoryItem, UserProfile } from '@/types/carecircle';
 
 export interface SafetyCheckResult {
   hasAlert: boolean;
@@ -12,9 +12,14 @@ export interface SafetyCheckResult {
 
 export function evaluateClinicalSafety(
   query: string,
-  memories: WalrusMemoryItem[]
+  memories: WalrusMemoryItem[],
+  userProfile?: UserProfile
 ): SafetyCheckResult | null {
   const q = query.toLowerCase();
+  const isPersonalUser = !!userProfile?.walletAddress;
+  const patientDisplayName = isPersonalUser
+    ? (userProfile?.name || 'User')
+    : 'Eleanor Vance';
 
   // 1. NSAID / GI Bleed check
   const isNsaidQuery =
@@ -33,18 +38,27 @@ export function evaluateClinicalSafety(
         m.text.toLowerCase().includes('gastritis') ||
         m.text.toLowerCase().includes('nsaid') ||
         m.text.toLowerCase().includes('bleeding') ||
-        m.text.toLowerCase().includes('burning')
+        m.text.toLowerCase().includes('burning') ||
+        m.text.toLowerCase().includes('ulcer')
     );
 
-    if (giMemories.length > 0) {
+    // Also check if personal user profile has NSAID allergy/contraindication
+    const hasNsaidAllergy = userProfile?.knownAllergies?.some((a) =>
+      ['nsaid', 'ibuprofen', 'aspirin', 'naproxen'].some((drug) => a.toLowerCase().includes(drug))
+    );
+
+    if (giMemories.length > 0 || hasNsaidAllergy) {
+      const description = isPersonalUser
+        ? `Clinical safety records for ${patientDisplayName} indicate gastrointestinal warning signs or documented NSAID contraindications.`
+        : 'Patient Eleanor Vance has recorded gastrointestinal warning signs across previous caregiver sessions with dark specks in stool and an explicit NSAID prohibition.';
+
       return {
         hasAlert: true,
         alertLevel: 'critical',
         title: 'CRITICAL CONTRAINDICATION: NSAID Administration Blocked',
-        description:
-          'Patient Eleanor Miller has recorded gastrointestinal warning signs across previous caregiver sessions. On Oct 3, Daughter (Sarah) documented dark specks in stool, and Nurse Elena noted epigastric tenderness with an explicit NSAID prohibition.',
+        description,
         recommendation:
-          'DO NOT administer Ibuprofen or other NSAIDs. High risk of precipitating acute gastrointestinal hemorrhage. Consider non-NSAID alternatives (e.g. Acetaminophen / Tylenol 500mg, if authorized by Dr. Adams). Contact the care team immediately.',
+          'DO NOT administer Ibuprofen or other NSAIDs. High risk of precipitating acute gastrointestinal hemorrhage. Consider non-NSAID alternatives (e.g. Acetaminophen / Tylenol 500mg, if authorized by attending clinician). Contact the care team immediately.',
         conflictingBlobs: giMemories.map((m) => m.blobId),
         amnesiaAlternative:
           'Standard adult dosage for Ibuprofen is 400mg every 4 to 6 hours with food. Ensure patient drinks a full glass of water. If headache persists beyond 24 hours, consult a physician.',
@@ -71,12 +85,15 @@ export function evaluateClinicalSafety(
     );
 
     if (orthostaticMems.length > 0) {
+      const description = isPersonalUser
+        ? `Recent records for ${patientDisplayName} show postural dizziness and low standing BP readings.`
+        : 'Care team recorded postural dizziness and standing BP drops to 102/64 mmHg for Eleanor Vance with elevated fall risk baseline.';
+
       return {
         hasAlert: true,
         alertLevel: 'warning',
         title: 'FALL HAZARD ALERT: Recent Postural Drop & Dizziness',
-        description:
-          'Daughter Sarah and Nurse Elena recorded postural dizziness and standing BP drops to 102/64 mmHg. Therapist David noted elevated TUG fall risk baseline.',
+        description,
         recommendation:
           'Enforce supervised transfers only. Implement a 60-second seated pause on the edge of the bed before standing. Use quad-cane for all ambulation.',
         conflictingBlobs: orthostaticMems.map((m) => m.blobId),

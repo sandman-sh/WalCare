@@ -186,14 +186,58 @@ export default function CareCirclePage() {
     return activeCaregiver;
   }, [isGuestMode, suiAccount, userProfile, activeCaregiver]);
 
+  const fetchVaultStats = useCallback(async (address?: string, guest?: boolean) => {
+    try {
+      const isGuest = guest !== undefined ? guest : isGuestMode;
+      const targetAddress = address !== undefined ? address : suiAccount?.address;
+      const params = new URLSearchParams();
+      if (targetAddress) params.append('walletAddress', targetAddress);
+      params.append('isGuest', isGuest ? 'true' : 'false');
+
+      const res = await fetch(`/api/memory?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats && typeof data.stats.total === 'number') {
+          setTotalBlobs(data.stats.total);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch vault stats:', err);
+    }
+  }, [isGuestMode, suiAccount?.address]);
+
+  const fetchConsoleStats = useCallback(async (address?: string, guest?: boolean) => {
+    try {
+      const isGuest = guest !== undefined ? guest : isGuestMode;
+      const targetAddress = address !== undefined ? address : suiAccount?.address;
+      const params = new URLSearchParams();
+      if (targetAddress) params.append('walletAddress', targetAddress);
+      params.append('isGuest', isGuest ? 'true' : 'false');
+
+      const res = await fetch(`/api/console?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files) {
+          setTotalDocs(data.files.length);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch console stats:', err);
+    }
+  }, [isGuestMode, suiAccount?.address]);
+
   const handleToggleGuestMode = () => {
     setIsGuestMode((prev) => {
       const next = !prev;
       if (next) {
         setUserProfile(DEMO_USER_PROFILE);
+        fetchVaultStats(undefined, true);
+        fetchConsoleStats(undefined, true);
       } else if (suiAccount) {
         const prof = loadWalletProfile(suiAccount.address) || createBlankProfile(suiAccount.address);
         setUserProfile(prof);
+        fetchVaultStats(suiAccount.address, false);
+        fetchConsoleStats(suiAccount.address, false);
       }
       return next;
     });
@@ -223,43 +267,7 @@ export default function CareCirclePage() {
   const [newEventTime, setNewEventTime] = useState<string>('');
   const [newEventType, setNewEventType] = useState<'shift' | 'appointment'>('shift');
 
-  const fetchVaultStats = async () => {
-    try {
-      const res = await fetch('/api/memory');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.stats?.total) {
-          setTotalBlobs(data.stats.total);
-        }
-      }
-    } catch (err) {
-      console.warn('Could not fetch vault stats:', err);
-    }
-  };
-
-  const fetchConsoleStats = useCallback(async (address?: string, guest?: boolean) => {
-    try {
-      const isGuest = guest !== undefined ? guest : isGuestMode;
-      const targetAddress = address !== undefined ? address : suiAccount?.address;
-      const params = new URLSearchParams();
-      if (targetAddress) params.append('walletAddress', targetAddress);
-      params.append('isGuest', isGuest ? 'true' : 'false');
-
-      const res = await fetch(`/api/console?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.files) {
-          setTotalDocs(data.files.length);
-        }
-      }
-    } catch (err) {
-      console.warn('Could not fetch console stats:', err);
-    }
-  }, [isGuestMode, suiAccount?.address]);
-
   useEffect(() => {
-    fetchVaultStats();
-
     // Restore saved wallet & wallet-keyed profile from localStorage
     try {
       const savedWallet = localStorage.getItem('walcare_sui_account');
@@ -278,11 +286,13 @@ export default function CareCirclePage() {
           saveWalletProfile(blank);
           setUserProfile(blank);
         }
+        fetchVaultStats(parsedWallet.address, false);
         fetchConsoleStats(parsedWallet.address, false);
       } else {
         // No wallet connected — start in guest mode with demo profile
         setIsGuestMode(true);
         setUserProfile(DEMO_USER_PROFILE);
+        fetchVaultStats(undefined, true);
         fetchConsoleStats(undefined, true);
       }
       const savedCal = localStorage.getItem('walcare_calendar_items');
@@ -292,7 +302,7 @@ export default function CareCirclePage() {
     } catch (e) {
       console.warn('Could not restore local storage items:', e);
     }
-  }, []);
+  }, [fetchVaultStats, fetchConsoleStats]);
 
   const handleAddCalendarEvent = (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,17 +350,22 @@ export default function CareCirclePage() {
 
     // Also persist observation to live Walrus Memory
     try {
+      const isPersonal = !isGuestMode && !!suiAccount;
       await fetch('/api/memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: `Patient Profile Synced: ${updated.name} (Age ${updated.age}, Blood ${updated.bloodGroup}). BP ${updated.systolicBp}/${updated.diastolicBp} mmHg, Pulse ${updated.heartRate} bpm, Weight ${updated.weightKg}kg, BMI ${updated.computedBmi}. Conditions: ${updated.primaryConditions.join(', ')}. Drug Contraindications: ${updated.knownAllergies.join(', ')}.`,
-          authorId: activeCaregiver.id,
+          text: `Patient Profile Synced: ${updated.name || 'User'} (Age ${updated.age || 'N/A'}, Blood ${updated.bloodGroup || 'N/A'}). BP ${updated.systolicBp}/${updated.diastolicBp} mmHg, Pulse ${updated.heartRate} bpm, Weight ${updated.weightKg}kg, BMI ${updated.computedBmi}. Conditions: ${updated.primaryConditions.join(', ')}. Drug Contraindications: ${updated.knownAllergies.join(', ')}.`,
+          authorId: isPersonal ? suiAccount.address : activeCaregiver.id,
+          authorName: isPersonal ? (updated.name || 'User') : activeCaregiver.name,
+          authorRole: isPersonal ? 'Patient / Account Owner' : activeCaregiver.role,
+          walletAddress: isPersonal ? suiAccount.address : undefined,
+          isGuest: isGuestMode,
           category: 'vitals',
           isSafetyCritical: updated.knownAllergies.length > 0,
         }),
       });
-      await fetchVaultStats();
+      await fetchVaultStats(suiAccount?.address, isGuestMode);
     } catch (err) {
       console.warn('Failed to sync profile to Walrus Memory:', err);
     }
@@ -418,13 +433,31 @@ export default function CareCirclePage() {
               if (data.actionExecuted.details.newAllergy) {
                 next.knownAllergies = Array.from(new Set([...next.knownAllergies, data.actionExecuted.details.newAllergy]));
               }
+              if (data.actionExecuted.details.name) {
+                next.name = data.actionExecuted.details.name;
+                // Sync user identity to live Walrus memory partition
+                fetch('/api/memory', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    text: `User identity established: Name is ${data.actionExecuted.details.name}.`,
+                    authorId: suiAccount ? suiAccount.address : currentUserCaregiver.id,
+                    authorName: data.actionExecuted.details.name,
+                    authorRole: 'Patient Profile',
+                    walletAddress: suiAccount?.address,
+                    isGuest: isGuestMode,
+                    category: 'general',
+                    isSafetyCritical: false,
+                  }),
+                }).catch(console.warn);
+              }
               saveWalletProfile(next);
               return next;
             });
           }
         }
 
-        await fetchVaultStats();
+        await fetchVaultStats(suiAccount?.address, isGuestMode);
       } else {
         const errorMsg: ChatMessage = {
           id: `err_${Date.now()}`,
@@ -845,7 +878,14 @@ export default function CareCirclePage() {
           </div>
         )}
 
-        {activeTab === 'vault' && <MemoryVault onRefreshMemories={fetchVaultStats} />}
+        {activeTab === 'vault' && (
+          <MemoryVault
+            onRefreshMemories={() => fetchVaultStats(suiAccount?.address, isGuestMode)}
+            suiAccount={suiAccount}
+            isGuestMode={isGuestMode}
+            userProfile={userProfile}
+          />
+        )}
 
         {activeTab === 'console' && (
           <ConsoleVault
@@ -888,6 +928,7 @@ export default function CareCirclePage() {
             setUserProfile(blank);
           }
 
+          fetchVaultStats(acc.address, false);
           fetchConsoleStats(acc.address, false);
           setIsWalletModalOpen(false);
           // Navigate to profile so user can fill in their health data
@@ -899,11 +940,13 @@ export default function CareCirclePage() {
           localStorage.removeItem('walcare_sui_account');
           // Revert to demo profile for guest experience
           setUserProfile(DEMO_USER_PROFILE);
+          fetchVaultStats(undefined, true);
           fetchConsoleStats(undefined, true);
         }}
         onContinueGuest={() => {
           setIsGuestMode(true);
           setIsWalletModalOpen(false);
+          fetchVaultStats(undefined, true);
           fetchConsoleStats(undefined, true);
         }}
         onOpenProfile={() => setActiveTab('profile')}

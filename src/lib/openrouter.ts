@@ -87,10 +87,10 @@ export async function callOpenRouterAI(
             // Ensure we have a friendly reply if content was mostly thinking
             let finalReply = parsed.cleanReply;
             if (!finalReply || finalReply.length < 5) {
-              if (parsed.actionExecuted?.type === 'update_vitals') {
+              if (parsed.actionExecuted?.type === 'update_profile') {
+                finalReply = `I've updated your health profile with your new details and synced it to your Walrus vault.`;
+              } else if (parsed.actionExecuted?.type === 'update_vitals') {
                 finalReply = `I've updated your vitals in your profile and recorded the new measurements into Walrus Memory.`;
-              } else if (parsed.actionExecuted?.type === 'update_profile') {
-                finalReply = `Your health profile has been successfully updated and synced with Walrus.`;
               } else {
                 finalReply = `I have received and recorded your clinical update in your continuous Walrus memory.`;
               }
@@ -106,7 +106,6 @@ export async function callOpenRouterAI(
         } else {
           const errText = await response.text();
           console.warn(`[OpenRouter] Model ${modelToTry} returned status ${response.status}:`, errText);
-          // If rate limited or unavailable, continue loop to try next fallback model
         }
       } catch (err: any) {
         console.warn(`[OpenRouter] Connection error with ${modelToTry}:`, err?.message || err);
@@ -128,12 +127,13 @@ Treat every interaction as the first time you are meeting this patient.
 Provide generic baseline information only. Do NOT remember past vitals, gastritis history, or past fall events.`;
   }
 
-  // Active patient data: use logged-in user profile if provided, otherwise default Eleanor Vance profile
   const isPersonalUser = !!userProfile?.walletAddress;
-  const patientName = userProfile?.name
-    ? userProfile.name
-    : (isPersonalUser ? 'You' : PATIENT_PROFILE.name);
-  const patientAge = userProfile?.age
+  const hasSavedName = !!userProfile?.name && userProfile.name.trim().length > 0;
+  const patientName = hasSavedName
+    ? userProfile!.name.trim()
+    : (isPersonalUser ? 'Personal User' : PATIENT_PROFILE.name);
+
+  const patientAge = userProfile?.age && userProfile.age > 0
     ? userProfile.age
     : (isPersonalUser ? 'Not set' : PATIENT_PROFILE.age);
   const patientGender = userProfile?.gender || (isPersonalUser ? 'Not set' : 'female');
@@ -163,10 +163,39 @@ Provide generic baseline information only. Do NOT remember past vitals, gastriti
         .join('\n')
     : 'No prior memories queried for this prompt.';
 
+  const actorName = isPersonalUser
+    ? (hasSavedName ? patientName : `Sui User (${userProfile?.walletAddress?.slice(0, 6)}...)`)
+    : caregiver.name;
+  const actorRole = isPersonalUser ? 'Patient / Account Owner' : caregiver.role;
+
+  // Identity and naming rules
+  const identityInstructions = isPersonalUser
+    ? hasSavedName
+      ? `AUTHENTICATED USER IDENTITY:
+- This user is authenticated via Sui wallet (${userProfile?.walletAddress}).
+- The user's name is "${patientName}".
+- ALWAYS address them by their name ("${patientName}").
+- You MUST remember their name across all interactions.
+- NEVER address this user as "Sarah", "Eleanor", or any other demo persona!`
+      : `AUTHENTICATED USER IDENTITY:
+- This user is authenticated via Sui wallet (${userProfile?.walletAddress}).
+- The user has NOT set up their profile name yet.
+- You MUST greet them, warmly introduce yourself as KIRO, and tell them to set up their profile name.
+- Tell them they can simply type their name in this chat (e.g. "My name is [Name]") or configure it in the Profile tab.
+- NEVER call this user "Sarah", "Eleanor", or any assumed name!
+- When the user tells you their name, immediately acknowledge it, call them by that name, and emit:
+  <<<ACTION_UPDATE_PROFILE: {"name": "<ExtractedName>"}>>>
+  so their name is permanently saved to their decentralized profile!`
+    : `GUEST DEMO MODE:
+- You are interacting in Guest Demo Mode with sample records for Eleanor Vance.
+- The family caregiver is Sarah Miller.`;
+
   return `You are KIRO, a deeply personalized, proactive clinical health AI companion powered by Walrus Protocol and the Sui Blockchain.
 You have continuous long-term memory across sessions, devices, and care team members.
 
-PATIENT PROFILE (${patientName.toUpperCase()}):
+${identityInstructions}
+
+PATIENT PROFILE:
 - Full Name: ${patientName}
 - Age: ${patientAge} | Biological Sex: ${patientGender} | Blood Group: ${bloodGroup}
 - Current Vitals & Biometrics: ${currentVitals}
@@ -174,11 +203,11 @@ PATIENT PROFILE (${patientName.toUpperCase()}):
 - Known Drug Allergies & Contraindications: ${allergies}
 - Active Medication Regimen: ${medications}
 - Emergency Contact: ${emergencyContact}
-- Walrus Account & Storage: Sui Wallet Mainnet Linked
+- Walrus Account & Storage: Sui Wallet Linked
 
-CURRENT ACTOR:
-- Name: ${caregiver.name} (${caregiver.title})
-- Role: ${caregiver.role}
+CURRENT INTERACTING ACTOR:
+- Name: ${actorName}
+- Role: ${actorRole}
 
 DECENTRALIZED WALRUS MEMORY CONTEXT:
 The following immutable observations have been securely retrieved from the patient's Walrus namespace:
@@ -186,9 +215,9 @@ ${memoryBlock}
 
 CLINICAL & NATURAL LANGUAGE ACTION CAPABILITIES:
 1. Natural Language Data Updates:
-   If the user shares new vitals or requests updating their profile, biometrics, or adding a clinical memory, understand it natively and output the exact action block at the end of your response:
+   If the user shares new vitals, profile data, or clinical observations, understand it natively and output the exact action block at the end of your response:
+   - For Name or Profile update: <<<ACTION_UPDATE_PROFILE: {"name": "...", "age": 88, "bloodGroup": "O+", "allergies": ["..."], "conditions": ["..."]}>>>
    - For Vitals update: <<<ACTION_UPDATE_VITALS: {"weightKg": 68, "heightCm": 172, "systolicBp": 120, "diastolicBp": 80, "heartRate": 74, "glucose": 95}>>>
-   - For Profile update: <<<ACTION_UPDATE_PROFILE: {"name": "...", "age": 88, "bloodGroup": "O+", "allergies": ["..."], "conditions": ["..."]}>>>
    - For Memory addition: <<<ACTION_ADD_MEMORY: {"text": "...", "category": "vitals|symptom|medication|diet|mobility|general", "isSafetyCritical": true}>>>
    - For Walrus Console Document: <<<ACTION_UPLOAD_DOC: {"name": "Lab Results", "description": "..."}>>>
 
@@ -228,7 +257,6 @@ function parseExtractionAndActions(
   if (vitalsMatch && vitalsMatch[1]) {
     const data = safeParseJson(vitalsMatch[1].trim());
     if (data && typeof data === 'object') {
-      // Filter out null/undefined values
       const cleanedData: Record<string, any> = {};
       for (const [k, v] of Object.entries(data)) {
         if (v !== null && v !== undefined) cleanedData[k] = v;
@@ -249,7 +277,7 @@ function parseExtractionAndActions(
     if (data && typeof data === 'object') {
       actionExecuted = {
         type: 'update_profile',
-        label: 'Patient Health Profile Updated',
+        label: data.name ? `Profile Name Set to ${data.name}` : 'Patient Health Profile Updated',
         details: data,
         applied: true,
       };
@@ -309,9 +337,34 @@ function parseExtractionAndActions(
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  // 6. Heuristic natural language vitals extraction if model didn't format tags
+  // 6. Natural language heuristic name & vitals extraction
+  const lower = userMessage.toLowerCase().trim();
+
+  // Natural language name extraction heuristic
+  const nameMatch = userMessage.match(/(?:my name is|i am called|call me|name is|set my name to|save my name as|i'm)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+  if (nameMatch && nameMatch[1]) {
+    const candidateName = nameMatch[1].trim();
+    const blacklist = ['kiro', 'fine', 'good', 'ok', 'okay', 'here', 'sick', 'tired', 'ready', 'back', 'asking', 'wondering', 'thinking', 'testing', 'sorry', 'hello', 'hi', 'a', 'the', 'feeling'];
+    if (!blacklist.includes(candidateName.toLowerCase()) && candidateName.length >= 2) {
+      if (!actionExecuted || actionExecuted.type !== 'update_profile') {
+        actionExecuted = {
+          type: 'update_profile',
+          label: `Profile Name Set to ${candidateName}`,
+          details: { name: candidateName },
+          applied: true,
+        };
+        extractedFact = {
+          text: `User profile name set to ${candidateName}`,
+          category: 'general',
+          isSafetyCritical: false,
+        };
+      } else if (actionExecuted.type === 'update_profile') {
+        actionExecuted.details.name = candidateName;
+      }
+    }
+  }
+
   if (!actionExecuted) {
-    const lower = userMessage.toLowerCase();
     const weightMatch = userMessage.match(/(\d{2,3}(?:\.\d)?)\s*(?:kg|kilos|pounds|lbs)/i);
     const heightMatch = userMessage.match(/(\d{2,3})\s*(?:cm|centimeters)/i);
     const bpMatch = userMessage.match(/(\d{2,3})\s*\/\s*(\d{2,3})/);
@@ -361,11 +414,15 @@ function parseExtractionAndActions(
 }
 
 function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletionResponse {
-  const { caregiver, recalledMemories, isAmnesiaMode, userProfile } = options;
+  const { isAmnesiaMode, userProfile } = options;
   const lastUserMsg = options.messages[options.messages.length - 1]?.content || '';
-  const q = lastUserMsg.toLowerCase();
+  const q = lastUserMsg.toLowerCase().trim();
+
   const isPersonalUser = !!userProfile?.walletAddress;
-  const patientName = userProfile?.name || (isPersonalUser ? 'Your Profile' : 'Eleanor Vance');
+  const hasSavedName = !!userProfile?.name && userProfile.name.trim().length > 0;
+  const patientName = hasSavedName
+    ? userProfile!.name.trim()
+    : (isPersonalUser ? 'Personal User' : 'Eleanor Vance');
 
   if (isAmnesiaMode) {
     if (q.includes('ibuprofen') || q.includes('advil') || q.includes('headache')) {
@@ -375,12 +432,53 @@ function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletio
       };
     }
     return {
-      reply: `I received your message. As memory is currently disabled, I do not have access to any previous notes, vital signs, or history for ${patientName}. Please provide full context if you need specific advice.`,
+      reply: `I received your message. As memory is currently disabled, I do not have access to any previous notes, vital signs, or history. Please provide full context if you need specific advice.`,
       modelUsed: 'Amnesia-Baseline (Goldfish AI)',
     };
   }
 
-  // Natural language vitals update handler
+  // 1. Check if user is introducing or stating their name
+  const nameIntroMatch = lastUserMsg.match(/(?:my name is|i am called|call me|name is|set my name to|save my name as|i'm)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+  if (isPersonalUser && nameIntroMatch && nameIntroMatch[1]) {
+    const rawName = nameIntroMatch[1].trim();
+    const blacklist = ['kiro', 'fine', 'good', 'ok', 'okay', 'here', 'sick', 'tired', 'ready', 'back', 'asking', 'wondering', 'thinking', 'testing', 'sorry', 'hello', 'hi', 'a', 'the', 'feeling'];
+    if (!blacklist.includes(rawName.toLowerCase()) && rawName.length >= 2) {
+      return {
+        reply: `Nice to meet you, **${rawName}**! I have updated your profile name and stored this identity in your private Walrus vault. From now on, I will remember you as ${rawName}. How can I assist you with your health today?`,
+        actionExecuted: {
+          type: 'update_profile',
+          label: `Profile Name Set to ${rawName}`,
+          details: { name: rawName },
+          applied: true,
+        },
+        extractedFact: {
+          text: `User profile name set to ${rawName}`,
+          category: 'general',
+          isSafetyCritical: false,
+        },
+        modelUsed: 'KIRO Health Engine (Walrus Certified)',
+      };
+    }
+  }
+
+  // 2. Check if user is asking who they are or what their name is
+  if (isPersonalUser && (q.includes('who am i') || q.includes('what is my name') || q.includes('do you know me') || q.includes('remember me') || q.includes('my name'))) {
+    if (hasSavedName) {
+      return {
+        reply: `Yes, of course! You are **${patientName}**, authenticated with Sui wallet \`${userProfile!.walletAddress.slice(0, 8)}...${userProfile!.walletAddress.slice(-6)}\`. All your medical records, observations, and biometrics are privately encrypted and stored under your identity on Walrus Protocol.`,
+        modelUsed: 'KIRO Health Engine (Walrus Certified)',
+      };
+    } else {
+      return {
+        reply: `You are connected with Sui wallet \`${userProfile!.walletAddress.slice(0, 8)}...${userProfile!.walletAddress.slice(-6)}\`, but you haven't set up your profile name yet.
+
+What should I call you? You can tell me your name right here (e.g. *"My name is Alex"*), and I will save it to your decentralized health profile, or you can update it in the **Profile** tab!`,
+        modelUsed: 'KIRO Health Engine (Walrus Certified)',
+      };
+    }
+  }
+
+  // 3. Natural language vitals update handler
   if (q.includes('weight') || q.includes('bp') || q.includes('pulse') || q.includes('blood pressure')) {
     const parsed = parseExtractionAndActions(
       `I have received and recorded your updated biometric data in ${isPersonalUser ? 'your' : `${patientName}'s`} clinical profile and decentralized Walrus Memory. Your BMI and vital trends have been recalculated automatically.`,
@@ -395,31 +493,63 @@ function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletio
     };
   }
 
-  // Cross-memory clinical synthesis:
+  // 4. Cross-memory clinical synthesis:
   if (q.includes('ibuprofen') || q.includes('advil') || q.includes('headache')) {
-    return {
-      reply: `[CLINICAL ALERT] **CRITICAL SAFETY WARNING: Check Contraindications for ${patientName}.**
+    const hasNsaidAllergy = userProfile?.knownAllergies?.some((a) =>
+      ['nsaid', 'ibuprofen', 'aspirin', 'naproxen'].some((drug) => a.toLowerCase().includes(drug))
+    );
+
+    if (hasNsaidAllergy || !isPersonalUser) {
+      return {
+        reply: `[CLINICAL ALERT] **CRITICAL SAFETY WARNING: Check Contraindications for ${patientName}.**
 
 I am **KIRO**, and I have cross-referenced ${isPersonalUser ? 'your' : `${patientName}'s`} decentralized Walrus Memory records on Sui:
 1. **Clinical Safety Rule**: NSAIDs like Ibuprofen irritate the gastric mucosa and can precipitate gastrointestinal flare-ups.
 2. **Recorded Allergies/Contraindications**: ${userProfile?.knownAllergies?.join(', ') || (isPersonalUser ? 'None documented yet' : 'NSAIDs (Melena / Acute Gastritis risk)')}.
 3. **Safety Recommendation**: If mild pain relief is needed, consult a clinician or consider Acetaminophen (Tylenol), provided no hepatic contraindications exist.`,
-      extractedFact: {
-        text: `Query regarding headache relief; NSAID administration analyzed against Walrus records.`,
-        category: 'medication',
-        isSafetyCritical: true,
-      },
-      modelUsed: 'KIRO Clinical Synthesis (Walrus Memory)',
+        extractedFact: {
+          text: `Query regarding headache relief; NSAID administration analyzed against Walrus records.`,
+          category: 'medication',
+          isSafetyCritical: true,
+        },
+        modelUsed: 'KIRO Clinical Synthesis (Walrus Memory)',
+      };
+    }
+  }
+
+  // 5. Default personalized greeting
+  if (isPersonalUser) {
+    if (!hasSavedName) {
+      return {
+        reply: `Hello! I am **KIRO**, your personalized clinical health AI partner on Walrus Protocol and Sui.
+
+I noticed that you haven't set up your profile name yet for wallet \`${userProfile?.walletAddress?.slice(0, 8)}...${userProfile?.walletAddress?.slice(-6)}\`.
+
+What should I call you? You can simply reply here (e.g. *"My name is Alex"*), and I will save it to your decentralized profile, or you can configure your full health details in the **Profile** tab!`,
+        modelUsed: 'KIRO Health Assistant (Walrus Memory)',
+      };
+    }
+
+    return {
+      reply: `Hello, **${patientName}**! I am **KIRO**, your personalized clinical health AI partner. I am connected to your private Walrus vault on Sui.
+
+I can help you:
+• Review and update vitals or biometrics in real-time (e.g. "My weight is 68kg and BP is 120/80")
+• Cross-reference medical history, allergies, and contraindications
+• Manage your private medical records and Walrus blobs
+
+How are you feeling today, ${patientName}?`,
+      modelUsed: 'KIRO Health Assistant (Walrus Memory)',
     };
   }
 
   return {
-    reply: `Hello! I am **KIRO**, your personalized clinical health AI partner. I am connected to ${isPersonalUser ? 'your' : `${patientName}'s`} decentralized Walrus Memory vault on Sui.
+    reply: `Hello! I am **KIRO**, your personalized clinical health AI partner. I am connected to Eleanor Vance's decentralized Walrus Memory vault on Sui (Guest Demo).
 
 I can help you:
-• Review and update vitals or biometrics in real-time (e.g. "My weight is 64kg and BP is 120/80")
+• Review and update vitals or biometrics in real-time
 • Cross-reference medical history, allergies, and contraindications
-• Search your stored medical records and Walrus blobs
+• Search stored medical records and Walrus blobs
 
 How can I assist your health care today?`,
     modelUsed: 'KIRO Health Assistant (Walrus Memory)',
