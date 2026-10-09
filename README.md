@@ -66,23 +66,6 @@ When asked about Ibuprofen, **WalCare (KIRO AI)** immediately intercepts the que
 
 ---
 
-## 📊 System Verification & Technical Implementation Matrix
-
-| Feature / Subsystem | Status | Technical Implementation Details |
-| :--- | :---: | :--- |
-| **KIRO Healthcare AI Engine** | **ACTIVE** | Connects directly via server-side fetch to high-precision clinical reasoning models (`qwen/qwen-2.5-72b-instruct` primary, ~800ms latency) with multi-model fallback chains. Zero credentials exposed to frontend. |
-| **3D Anatomical Body Visualizer** | **ACTIVE** | Full Three.js WebGL canvas rendering `public/models/human-model.glb` with dynamic matrix projections, raycast coordinates, and ACES Filmic tone mapping. |
-| **BMI Calculator & Fitness Tracker** | **ACTIVE** | 100% mathematical formulas ($kg / m^2$), live slider biometrics, hydration progress, and persistent `localStorage` synchronization. |
-| **Natural Language Bot Actions** | **ACTIVE** | Natural language intent parser converting caregiver instructions into structured state updates for vitals, medications, and allergies. |
-| **Care Calendar & Scheduler** | **ACTIVE** | Interactive event creation modal, completion toggles, delete handlers, and multi-session persistence. |
-| **Walrus Memory (MemWal SDK)** | **LIVE ON-CHAIN** | Official `@mysten-incubation/memwal` client connected to `https://relayer.memory.walrus.xyz` on Sui mainnet. Automatically syncs with local credentials (`~/.memwal/credentials.json`) with resilient decentralized memory synchronization. |
-| **Walrus Console File Vault** | **100% LIVE ON-CHAIN** | Connected directly to live decentralized Walrus Console (`https://api.console.walrus.xyz`) with real on-chain buckets (`sandman`), client-side Seal cryptographic threshold encryption for uploads, private key decryption for downloads, live storage quota (`/api/v1/usage`), and permanent HTTP 204 file deletions. Zero secrets exposed to frontend. |
-| **Sui Wallet Authentication** | **LIVE ON-CHAIN** | Native Sui Wallet Standard auto-discovery for Slush, Surf, Suiet, and Nightly. In-browser genuine Ed25519 keypair generation, Bech32/Hex key import, and live Sui Mainnet balance queries. |
-| **Amnesia Diff Lab Modal** | **ACTIVE** | Counterfactual side-by-side prompt execution comparing KIRO with full Walrus memory context vs a memory-wiped baseline AI model. |
-| **Eleanor Vance Clinical Baseline** | **CLINICAL BENCHMARK** | Standardized 88-year-old geriatric clinical persona (Eleanor Vance, AFib, Melena, NSAID contraindication) and certified caregiver observation logs (Sarah, Nurse Elena, David PT) verified on Walrus Protocol. |
-
----
-
 ## 🏗️ System Architecture
 
 ```mermaid
