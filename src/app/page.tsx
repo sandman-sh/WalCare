@@ -68,7 +68,8 @@ const DEFAULT_CALENDAR_ITEMS: CalendarEvent[] = [
   },
 ];
 
-const DEFAULT_USER_PROFILE: UserProfile = {
+// Demo profile shown to guest users who haven't connected a wallet
+const DEMO_USER_PROFILE: UserProfile = {
   walletAddress: '0x7a8b9cf4e2193f12',
   name: 'Eleanor Vance',
   age: 88,
@@ -99,6 +100,59 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   updatedAt: new Date().toISOString(),
 };
 
+/**
+ * Creates a fresh blank profile for a newly connected wallet user.
+ * The user fills in their own health data — no mocked data.
+ */
+const createBlankProfile = (walletAddress: string): UserProfile => ({
+  walletAddress,
+  name: '',
+  age: 0,
+  gender: 'prefer_not_to_say',
+  dateOfBirth: '',
+  bloodGroup: 'Unknown',
+  heightCm: 0,
+  weightKg: 0,
+  computedBmi: 0,
+  systolicBp: 0,
+  diastolicBp: 0,
+  heartRate: 0,
+  glucose: 0,
+  primaryConditions: [],
+  knownAllergies: [],
+  currentMedications: [],
+  emergencyContact: {
+    name: '',
+    phone: '',
+    relation: '',
+  },
+  physician: '',
+  walrusNamespace: `walcare-${walletAddress.slice(0, 10)}`,
+  updatedAt: new Date().toISOString(),
+});
+
+/** Load a wallet-keyed profile from localStorage, or return null if none exists */
+const loadWalletProfile = (walletAddress: string): UserProfile | null => {
+  try {
+    const saved = localStorage.getItem(`walcare_profile_${walletAddress}`);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.warn('Could not load wallet profile:', e);
+  }
+  return null;
+};
+
+/** Persist a profile keyed by wallet address */
+const saveWalletProfile = (profile: UserProfile) => {
+  try {
+    localStorage.setItem(`walcare_profile_${profile.walletAddress}`, JSON.stringify(profile));
+    // Also keep the generic key for backward compat
+    localStorage.setItem('walcare_user_profile', JSON.stringify(profile));
+  } catch (e) {
+    console.warn('Could not save wallet profile:', e);
+  }
+};
+
 export default function CareCirclePage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [activeCaregiver, setActiveCaregiver] = useState<Caregiver>(CAREGIVERS[0]);
@@ -111,7 +165,7 @@ export default function CareCirclePage() {
   // Sui Wallet & User Profile State
   const [suiAccount, setSuiAccount] = useState<SuiAccount | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState<boolean>(false);
-  const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
+  const [userProfile, setUserProfile] = useState<UserProfile>(DEMO_USER_PROFILE);
 
   // Chat message stream state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -169,15 +223,26 @@ export default function CareCirclePage() {
     fetchVaultStats();
     fetchConsoleStats();
 
-    // Restore saved profile & Sui wallet from localStorage
+    // Restore saved wallet & wallet-keyed profile from localStorage
     try {
       const savedWallet = localStorage.getItem('walcare_sui_account');
       if (savedWallet) {
-        setSuiAccount(JSON.parse(savedWallet));
-      }
-      const savedProfile = localStorage.getItem('walcare_user_profile');
-      if (savedProfile) {
-        setUserProfile(JSON.parse(savedProfile));
+        const parsedWallet = JSON.parse(savedWallet);
+        setSuiAccount(parsedWallet);
+
+        // Load this wallet's profile (wallet-keyed), or create blank if first time
+        const walletProfile = loadWalletProfile(parsedWallet.address);
+        if (walletProfile) {
+          setUserProfile(walletProfile);
+        } else {
+          // First login with this wallet — start with blank profile
+          const blank = createBlankProfile(parsedWallet.address);
+          saveWalletProfile(blank);
+          setUserProfile(blank);
+        }
+      } else {
+        // No wallet connected — show demo profile for guest experience
+        setUserProfile(DEMO_USER_PROFILE);
       }
       const savedCal = localStorage.getItem('walcare_calendar_items');
       if (savedCal) {
@@ -230,7 +295,7 @@ export default function CareCirclePage() {
 
   const handleSaveProfile = async (updated: UserProfile) => {
     setUserProfile(updated);
-    localStorage.setItem('walcare_user_profile', JSON.stringify(updated));
+    saveWalletProfile(updated);
 
     // Also persist observation to live Walrus Memory
     try {
@@ -302,7 +367,7 @@ export default function CareCirclePage() {
                 const h = (next.heightCm || 160) / 100;
                 next.computedBmi = Number((next.weightKg / (h * h)).toFixed(1));
               }
-              localStorage.setItem('walcare_user_profile', JSON.stringify(next));
+              saveWalletProfile(next);
               return next;
             });
           } else if (data.actionExecuted.type === 'update_profile' && data.actionExecuted.details) {
@@ -311,7 +376,7 @@ export default function CareCirclePage() {
               if (data.actionExecuted.details.newAllergy) {
                 next.knownAllergies = Array.from(new Set([...next.knownAllergies, data.actionExecuted.details.newAllergy]));
               }
-              localStorage.setItem('walcare_user_profile', JSON.stringify(next));
+              saveWalletProfile(next);
               return next;
             });
           }
@@ -731,16 +796,26 @@ export default function CareCirclePage() {
         onConnect={(acc) => {
           setSuiAccount(acc);
           localStorage.setItem('walcare_sui_account', JSON.stringify(acc));
-          setUserProfile((prev) => {
-            const next = { ...prev, walletAddress: acc.address };
-            localStorage.setItem('walcare_user_profile', JSON.stringify(next));
-            return next;
-          });
+
+          // Load existing profile for this wallet, or create a fresh blank one
+          const existingProfile = loadWalletProfile(acc.address);
+          if (existingProfile) {
+            setUserProfile(existingProfile);
+          } else {
+            const blank = createBlankProfile(acc.address);
+            saveWalletProfile(blank);
+            setUserProfile(blank);
+          }
+
           setIsWalletModalOpen(false);
+          // Navigate to profile so user can fill in their health data
+          setActiveTab('profile');
         }}
         onDisconnect={() => {
           setSuiAccount(null);
           localStorage.removeItem('walcare_sui_account');
+          // Revert to demo profile for guest experience
+          setUserProfile(DEMO_USER_PROFILE);
         }}
         onOpenProfile={() => setActiveTab('profile')}
       />
