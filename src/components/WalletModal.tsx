@@ -328,10 +328,10 @@ export function WalletModal({
       // 2. Direct window object connection
       if (option.windowObj) {
         const ext = option.windowObj;
-        if (typeof ext.requestPermissions === 'function') {
-          await ext.requestPermissions();
-        } else if (typeof ext.connect === 'function') {
+        if (typeof ext.connect === 'function') {
           await ext.connect();
+        } else if (typeof ext.requestPermissions === 'function') {
+          await ext.requestPermissions();
         }
 
         const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : ext.accounts;
@@ -348,7 +348,8 @@ export function WalletModal({
       if (option.id === 'slush' || option.id === 'sui_wallet') {
         const ext = w.slush || w.suiWallet || w.__sui__;
         if (ext) {
-          if (typeof ext.requestPermissions === 'function') await ext.requestPermissions();
+          if (typeof ext.connect === 'function') await ext.connect();
+          else if (typeof ext.requestPermissions === 'function') await ext.requestPermissions();
           const accounts = typeof ext.getAccounts === 'function' ? await ext.getAccounts() : [];
           if (accounts?.[0]) {
             await finalizeLogin(accounts[0]?.address || accounts[0], 'Slush Wallet', 'extension');
