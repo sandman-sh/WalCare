@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Heart,
@@ -17,6 +17,9 @@ import {
   Calendar,
   Wallet,
   RotateCcw,
+  Camera,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { UserProfile } from '@/types/carecircle';
 import { SuiAccount } from './WalletModal';
@@ -39,6 +42,9 @@ export function ProfileView({
   const [formData, setFormData] = useState<UserProfile>(profile);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadBlobSuccess, setUploadBlobSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New condition / allergy inputs
   const [newCondition, setNewCondition] = useState('');
@@ -128,6 +134,51 @@ export function ProfileView({
     }));
   };
 
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate size (max 8MB)
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Photo size exceeds 8MB. Please select a smaller image.');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const formDataObj = new FormData();
+      formDataObj.append('file', file);
+
+      const res = await fetch('/api/avatar/upload', {
+        method: 'POST',
+        body: formDataObj,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated: UserProfile = {
+          ...formData,
+          avatarUrl: data.avatarUrl,
+          photoBlobId: data.blobId,
+          updatedAt: new Date().toISOString(),
+        };
+        setFormData(updated);
+        await onSaveProfile(updated);
+        setUploadBlobSuccess(data.blobId);
+        setTimeout(() => setUploadBlobSuccess(null), 5000);
+      } else {
+        const errJson = await res.json();
+        alert(`Upload error: ${errJson.error || 'Failed to store image on Walrus'}`);
+      }
+    } catch (err) {
+      console.error('Failed to upload avatar to Walrus:', err);
+      alert('Network error while transmitting avatar to Walrus Protocol.');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -159,6 +210,28 @@ export function ProfileView({
         </div>
       )}
 
+      {/* Walrus Avatar Upload Toast */}
+      {uploadBlobSuccess && (
+        <div className="fixed top-20 left-8 z-50 p-4 rounded-2xl bg-cyan-600 text-white shadow-2xl flex items-center gap-2.5 animate-in fade-in">
+          <Sparkles className="w-5 h-5 text-white" />
+          <div>
+            <div className="text-xs font-bold">Avatar Certified on Walrus Storage!</div>
+            <div className="text-[10px] font-mono opacity-90 truncate max-w-xs">
+              Blob: {uploadBlobSuccess}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden File Input for Avatar Upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handlePhotoSelect}
+        className="hidden"
+      />
+
       {/* Top Banner: Patient Overview & Sui Wallet Status */}
       <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-purple-900/60 via-[#1B1E2E] to-[#12151E] border border-white/10 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -166,10 +239,51 @@ export function ProfileView({
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           {/* Left: Avatar + Bio Details */}
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-rose-500 via-purple-600 to-cyan-500 p-0.5 shadow-xl shadow-purple-500/30 shrink-0">
-              <div className="w-full h-full rounded-[22px] bg-[#12151E] flex items-center justify-center text-white">
-                <User className="w-8 h-8 text-purple-300" />
+            {/* Interactive Avatar Card with Walrus Badge */}
+            <div className="relative group shrink-0">
+              <div
+                onClick={() => !isUploadingPhoto && fileInputRef.current?.click()}
+                className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-rose-500 via-purple-600 to-cyan-500 p-0.5 shadow-xl shadow-purple-500/30 cursor-pointer overflow-hidden transition-transform transform group-hover:scale-105 active:scale-95"
+                title="Click to upload profile picture to Walrus"
+              >
+                <div className="w-full h-full rounded-[22px] bg-[#12151E] overflow-hidden flex items-center justify-center relative">
+                  {formData.avatarUrl ? (
+                    <img
+                      src={formData.avatarUrl}
+                      alt={formData.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-10 h-10 text-purple-300" />
+                  )}
+
+                  {/* Hover Overlay */}
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                    <Camera className="w-5 h-5 text-cyan-300 mb-0.5" />
+                    <span className="text-[9px] font-bold tracking-wider uppercase text-cyan-200">
+                      Change
+                    </span>
+                  </div>
+
+                  {/* Loading Spinner */}
+                  {isUploadingPhoto && (
+                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white z-20">
+                      <Loader2 className="w-6 h-6 animate-spin text-cyan-400 mb-1" />
+                      <span className="text-[8px] font-bold text-cyan-300">Walrus Sync</span>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Upload badge indicator */}
+              <button
+                type="button"
+                onClick={() => !isUploadingPhoto && fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-cyan-500 hover:bg-cyan-400 text-white shadow-md border-2 border-[#12151E] cursor-pointer transition-colors"
+                title="Upload Photo directly to Walrus"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
             </div>
 
             <div>
@@ -186,6 +300,12 @@ export function ProfileView({
                 <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${bmiStatus.color}`}>
                   BMI {computedBmi} • {bmiStatus.label}
                 </span>
+                {formData.photoBlobId && (
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-mono">
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    <span>Walrus Photo: {formData.photoBlobId.slice(0, 8)}...</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-300 mt-1">
                 Personalized Clinical Profile • Authenticated via Sui Blockchain &amp; Decentralized Walrus Memory

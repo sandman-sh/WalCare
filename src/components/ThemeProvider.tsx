@@ -11,13 +11,13 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
+  theme: 'light',
   toggleTheme: () => {},
   setTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>('light');
   const [mounted, setMounted] = useState(false);
 
   const applyThemeToDOM = (t: Theme) => {
@@ -49,12 +49,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Check saved theme or fallback to dark
+    // Check saved theme or fallback to light (white background)
     let saved = localStorage.getItem('walcare_theme') as Theme | null;
     if (!saved) {
       saved = localStorage.getItem('carecircle_theme') as Theme | null;
     }
-    const initialTheme: Theme = saved === 'light' ? 'light' : 'dark';
+    const initialTheme: Theme = saved === 'dark' ? 'dark' : 'light';
     setThemeState(initialTheme);
     applyThemeToDOM(initialTheme);
     setMounted(true);

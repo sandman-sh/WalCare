@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
         daughter_sarah: all.filter((m) => m.authorId === 'daughter_sarah').length,
         nurse_elena: all.filter((m) => m.authorId === 'nurse_elena').length,
         physio_david: all.filter((m) => m.authorId === 'physio_david').length,
+        dr_adams: all.filter((m) => m.authorId === 'dr_adams').length,
       },
       namespace: 'carecircle-eleanor-88',
       suiObjectId: '0xd7ec125eb467c0cce65b219ff7ddeea217c16709077c2c48c183e47e80704287',

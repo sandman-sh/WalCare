@@ -1,4 +1,4 @@
-export type CaregiverRole = 'daughter' | 'nurse' | 'physio';
+export type CaregiverRole = 'daughter' | 'nurse' | 'physio' | 'physician';
 
 export interface Caregiver {
   id: string;
@@ -106,6 +106,8 @@ export interface WalrusConsoleStorageUsage {
 export interface UserProfile {
   walletAddress: string;
   name: string;
+  avatarUrl?: string;
+  photoBlobId?: string;
   age: number;
   gender: 'female' | 'male' | 'other' | 'prefer_not_to_say';
   dateOfBirth?: string;

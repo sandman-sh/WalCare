@@ -22,12 +22,12 @@ interface MemoryVaultProps {
 export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
   const [memories, setMemories] = useState<WalrusMemoryItem[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<WalrusMemoryItem[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'daughter' | 'nurse' | 'physio' | 'critical'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'daughter' | 'nurse' | 'physio' | 'physician' | 'critical'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     total: 30,
-    byCaregiver: { daughter_sarah: 10, nurse_elena: 10, physio_david: 10 },
+    byCaregiver: { daughter_sarah: 10, nurse_elena: 10, physio_david: 10, dr_adams: 0 },
     namespace: 'carecircle-eleanor-88',
     suiObjectId: '0xd7ec125eb467c0cce65b219ff7ddeea217c16709077c2c48c183e47e80704287',
   });
@@ -69,6 +69,8 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
       result = result.filter((m) => m.authorId === 'nurse_elena');
     } else if (activeFilter === 'physio') {
       result = result.filter((m) => m.authorId === 'physio_david');
+    } else if (activeFilter === 'physician') {
+      result = result.filter((m) => m.authorId === 'dr_adams');
     } else if (activeFilter === 'critical') {
       result = result.filter((m) => m.isSafetyCritical);
     }
@@ -202,10 +204,11 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           {(
             [
-              { id: 'all', label: 'All Blobs' },
-              { id: 'daughter', label: 'Daughter' },
-              { id: 'nurse', label: 'Nurse RN' },
-              { id: 'physio', label: 'Physio DPT' },
+              { id: 'all', label: 'All Blobs (Multiplayer)' },
+              { id: 'daughter', label: 'Sarah (Family)' },
+              { id: 'nurse', label: 'Elena (Nurse RN)' },
+              { id: 'physio', label: 'David (Physio)' },
+              { id: 'physician', label: 'Dr. Adams (MD)' },
               { id: 'critical', label: 'Critical Flags' },
             ] as const
           ).map((f) => {
@@ -330,9 +333,10 @@ export function MemoryVault({ onRefreshMemories }: MemoryVaultProps) {
                   onChange={(e) => setNewAuthor(e.target.value)}
                   className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-[#141722] border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white focus:outline-none"
                 >
-                  <option value="daughter_sarah">Sarah (Daughter / Family Caregiver)</option>
-                  <option value="nurse_elena">Elena Rostova (Registered Nurse RN)</option>
-                  <option value="physio_david">David Chen (Physical Therapist DPT)</option>
+                  <option value="daughter_sarah">Sarah Miller (Daughter / Family Caregiver)</option>
+                  <option value="nurse_elena">Elena Rostova, RN (Registered Nurse)</option>
+                  <option value="physio_david">David Chen, DPT (Physical Therapist)</option>
+                  <option value="dr_adams">Dr. Robert Adams, MD (Attending Physician)</option>
                 </select>
               </div>
 

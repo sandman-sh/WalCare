@@ -44,6 +44,17 @@ export const CAREGIVERS: Caregiver[] = [
     shiftHours: '16:00 - 18:00 (Afternoon Shift)',
     responsibilities: ['Fall risk assessment', 'Gait training & transfers', 'Strength & range of motion'],
   },
+  {
+    id: 'dr_adams',
+    name: 'Dr. Robert Adams, MD',
+    role: 'physician',
+    title: 'Attending Geriatric Physician',
+    badge: 'Physician MD',
+    avatar: 'doctor',
+    color: '#EC4899', // Pink
+    shiftHours: 'On-Call & Clinical Rounds',
+    responsibilities: ['Clinical oversight', 'Prescription orders', 'Contraindication management'],
+  },
 ];
 
 export const INITIAL_WALRUS_MEMORIES: WalrusMemoryItem[] = [

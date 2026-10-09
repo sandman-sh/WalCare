@@ -212,7 +212,7 @@ export function Sidebar({
               <span className="text-[10px] text-purple-300 font-bold">{activeCaregiver.role}</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {CAREGIVERS.map((cg) => {
                 const isSelected = activeCaregiver.id === cg.id;
                 return (
@@ -226,7 +226,7 @@ export function Sidebar({
                         : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
                     }`}
                   >
-                    <div className="text-purple-300 mb-1">{getCaregiverIcon(cg.id)}</div>
+                    <div className="text-purple-300 mb-0.5">{getCaregiverIcon(cg.id)}</div>
                     <div className="text-[10px] truncate max-w-full font-medium">{cg.name.split(' ')[0]}</div>
                   </button>
                 );

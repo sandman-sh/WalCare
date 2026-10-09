@@ -431,6 +431,8 @@ export default function CareCirclePage() {
           onOpenMobileMenu={() => setIsMobileOpen(true)}
           suiAccount={suiAccount}
           onConnectWallet={() => setIsWalletModalOpen(true)}
+          userProfile={userProfile}
+          onOpenProfile={() => setActiveTab('profile')}
         />
 
         {/* View Switcher */}
@@ -466,6 +468,7 @@ export default function CareCirclePage() {
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
               activeCaregiver={activeCaregiver}
+              onCaregiverChange={setActiveCaregiver}
               isAmnesiaMode={isAmnesiaMode}
               onOpenDiffModal={(userPrompt, memoryReply, amnesiaReply) => {
                 setDiffModal({

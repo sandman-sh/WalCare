@@ -36,8 +36,10 @@ yarn-error.log*
 .env.*.local
 !.env.example
 
-# scratch
+# scratch & temporary
 /scratch/
+/.tmp/
+*.log
 
 # vercel
 .vercel

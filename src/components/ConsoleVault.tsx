@@ -18,6 +18,9 @@ import {
   Activity,
   Pill,
   Trash2,
+  Eye,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { WalrusConsoleFile, WalrusConsoleBucket, WalrusConsoleStorageUsage } from '@/types/carecircle';
 import { DEFAULT_BUCKET_ID, DEFAULT_SEAL_POLICY } from '@/lib/consoleConfig';
@@ -29,6 +32,11 @@ export function ConsoleVault() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [copiedBlobId, setCopiedBlobId] = useState<string | null>(null);
+
+  // In-app Document Preview Modal
+  const [previewFile, setPreviewFile] = useState<WalrusConsoleFile | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -119,6 +127,25 @@ export function ConsoleVault() {
       }
     } catch (err) {
       console.error('Failed to download decrypted file:', err);
+    }
+  };
+
+  const handleViewFile = async (file: WalrusConsoleFile) => {
+    setPreviewFile(file);
+    setIsPreviewLoading(true);
+    setPreviewContent(null);
+    try {
+      const res = await fetch(`/api/console?action=download&id=${file.id}&bucketId=${file.bucketId}`);
+      if (res.ok) {
+        const text = await res.text();
+        setPreviewContent(text);
+      } else {
+        setPreviewContent('Decryption engine unavailable. Please try downloading or verifying SEAL threshold policy.');
+      }
+    } catch (err) {
+      setPreviewContent('Failed to decrypt document from Walrus storage.');
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
@@ -354,7 +381,15 @@ export function ConsoleVault() {
                   )}
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleViewFile(file)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 font-semibold text-xs transition-colors cursor-pointer"
+                    title="Decrypt and view document directly in app"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>View</span>
+                  </button>
                   <button
                     onClick={() => handleDownload(file)}
                     className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white font-semibold text-xs transition-colors cursor-pointer"
@@ -480,6 +515,88 @@ export function ConsoleVault() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* In-App Decrypted Document Viewer Modal */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[85vh] flex flex-col p-6 rounded-3xl bg-white dark:bg-[#171A24] border border-slate-200 dark:border-white/20 shadow-2xl text-slate-900 dark:text-white overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold truncate max-w-sm sm:max-w-md">{previewFile.name}</h3>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                    <span>Walrus Blob: {previewFile.blobId.slice(0, 16)}...</span>
+                    <span>•</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Decrypted via SEAL</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setPreviewFile(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body: Decrypted Document Content */}
+            <div className="my-4 flex-1 overflow-y-auto rounded-2xl bg-slate-50 dark:bg-[#12151E] border border-slate-200 dark:border-white/5 p-4 text-xs font-mono leading-relaxed whitespace-pre-wrap select-text">
+              {isPreviewLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+                  <span className="text-xs font-sans font-medium">
+                    Invoking SEAL threshold decryption engine on Walrus Protocol...
+                  </span>
+                </div>
+              ) : (
+                previewContent || 'Empty document payload.'
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 flex items-center justify-between text-xs shrink-0">
+              <button
+                onClick={() => {
+                  if (previewContent) {
+                    navigator.clipboard.writeText(previewContent);
+                    alert('Decrypted document copied to clipboard!');
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Payload</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownload(previewFile)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download File</span>
+                </button>
+                <button
+                  onClick={() => setPreviewFile(null)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-white font-semibold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -21,6 +21,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Caregiver, ChatMessage, MemoryCategory } from '@/types/carecircle';
+import { CAREGIVERS } from '@/lib/seedData';
 import { MascotHero } from './MascotHero';
 
 interface ChatInterfaceProps {
@@ -28,6 +29,7 @@ interface ChatInterfaceProps {
   onSendMessage: (text: string, category?: MemoryCategory) => Promise<void>;
   isLoading: boolean;
   activeCaregiver: Caregiver;
+  onCaregiverChange?: (cg: Caregiver) => void;
   isAmnesiaMode: boolean;
   onOpenDiffModal: (userPrompt: string, memoryReply: string, amnesiaReply: string) => void;
 }
@@ -134,6 +136,7 @@ export function ChatInterface({
   onSendMessage,
   isLoading,
   activeCaregiver,
+  onCaregiverChange,
   isAmnesiaMode,
   onOpenDiffModal,
 }: ChatInterfaceProps) {
@@ -417,7 +420,34 @@ export function ChatInterface({
 
       {/* Input Area */}
       <div className="p-4 sm:p-6 bg-white/90 dark:bg-[#12151E]/90 backdrop-blur-xl border-t border-slate-200 dark:border-white/5 relative z-20 transition-colors">
-        <div className="max-w-4xl mx-auto space-y-3">
+        <div className="max-w-4xl mx-auto space-y-2.5">
+          {/* CareCircle Multiplayer Active Speaker Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none border-b border-slate-200/80 dark:border-white/5">
+            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 mr-1 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Speaking As:</span>
+            </span>
+            {CAREGIVERS.map((cg) => {
+              const isSelected = activeCaregiver.id === cg.id;
+              return (
+                <button
+                  key={cg.id}
+                  type="button"
+                  onClick={() => onCaregiverChange?.(cg)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-white/30'
+                      : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/5'
+                  }`}
+                  title={`Switch active speaker to ${cg.name} (${cg.role})`}
+                >
+                  <span>{cg.name}</span>
+                  <span className="text-[9px] opacity-75 font-normal">({cg.badge || cg.role})</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Category Chips Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1 shrink-0">
