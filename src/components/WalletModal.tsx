@@ -7,18 +7,10 @@ import {
   Copy,
   ExternalLink,
   ShieldCheck,
-  Zap,
-  HardDrive,
   LogOut,
   X,
-  AlertCircle,
   Sparkles,
-  KeyRound,
-  Download,
-  Eye,
-  EyeOff,
   RefreshCw,
-  Plus,
 } from 'lucide-react';
 
 import { getWallets } from '@mysten/wallet-standard';
@@ -30,8 +22,7 @@ export interface SuiAccount {
   network: 'mainnet' | 'testnet';
   walrusStorageMb: number;
   walrusObjectId: string;
-  secretKey?: string;
-  walletType?: 'extension' | 'web_keypair' | 'imported';
+  walletType?: 'extension';
 }
 
 interface WalletOption {
@@ -63,18 +54,8 @@ export function WalletModal({
   onOpenProfile,
 }: WalletModalProps) {
   const [copied, setCopied] = useState(false);
-  const [copiedSecret, setCopiedSecret] = useState(false);
-  const [activeTab, setActiveTab] = useState<'extensions' | 'create' | 'import'>('extensions');
   const [isConnecting, setIsConnecting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  // Import State
-  const [importKey, setImportKey] = useState('');
-  const [importError, setImportError] = useState<string | null>(null);
-
-  // Created Key State
-  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
-  const [showSecretKey, setShowSecretKey] = useState(false);
 
   // Dynamic Browser Wallets
   const [walletList, setWalletList] = useState<WalletOption[]>([]);
@@ -292,15 +273,10 @@ export function WalletModal({
 
   if (!isOpen) return null;
 
-  const handleCopy = (text: string, isSecret = false) => {
+  const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
-    if (isSecret) {
-      setCopiedSecret(true);
-      setTimeout(() => setCopiedSecret(false), 2000);
-    } else {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   /**
@@ -394,64 +370,12 @@ export function WalletModal({
   };
 
   /**
-   * Generate an authentic, real Ed25519 Sui Keypair in the browser
-   */
-  const handleCreateNewSuiWallet = async () => {
-    setIsConnecting(true);
-    setStatusMessage('Generating on-chain Ed25519 keypair for Sui Mainnet...');
-    try {
-      const res = await fetch('/api/wallet?action=create');
-      if (!res.ok) throw new Error('Failed to create keypair');
-      const data = await res.json();
-
-      setCreatedSecret(data.secretKey);
-      await finalizeLogin(data.address, 'Instant Sui Web Wallet', 'web_keypair', data.secretKey);
-    } catch (err: any) {
-      console.error('Failed to create Sui wallet:', err);
-      setStatusMessage('Error creating on-chain wallet. Please try again.');
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  /**
-   * Import an existing Sui Private Key (suiprivkey...)
-   */
-  const handleImportKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!importKey.trim()) return;
-
-    setIsConnecting(true);
-    setImportError(null);
-    try {
-      const res = await fetch('/api/wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', secretKey: importKey.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid Sui private key');
-      }
-
-      await finalizeLogin(data.address, 'Imported Sui Identity', 'imported', data.secretKey);
-      setImportKey('');
-    } catch (err: any) {
-      setImportError(err.message || 'Invalid private key format.');
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  /**
    * Finalize login and fetch live on-chain Sui balance
    */
   const finalizeLogin = async (
     address: string,
     name: string,
-    walletType: 'extension' | 'web_keypair' | 'imported',
-    secretKey?: string
+    walletType: 'extension' = 'extension'
   ) => {
     setStatusMessage('Querying Sui network for balance & storage quota...');
     let balanceSui = 0.0;
@@ -473,15 +397,11 @@ export function WalletModal({
       network: 'mainnet',
       walrusStorageMb: 50.0,
       walrusObjectId: `0x${address.slice(2, 34)}`,
-      secretKey,
       walletType,
     };
 
     try {
       localStorage.setItem('walcare_sui_account', JSON.stringify(newAccount));
-      if (secretKey) {
-        localStorage.setItem('walcare_sui_secret_key', secretKey);
-      }
     } catch (e) {
       console.warn('LocalStorage error:', e);
     }
@@ -570,36 +490,6 @@ export function WalletModal({
                     </div>
                   </div>
                 </div>
-
-                {/* Secret Key Display if locally created */}
-                {account.secretKey && (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
-                        <KeyRound className="w-3.5 h-3.5" />
-                        Private Key (Stored Locally)
-                      </span>
-                      <button
-                        onClick={() => setShowSecretKey(!showSecretKey)}
-                        className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white cursor-pointer"
-                      >
-                        {showSecretKey ? 'Hide' : 'Reveal'}
-                      </button>
-                    </div>
-                    {showSecretKey && (
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-black/40 font-mono text-[10px] text-slate-200">
-                        <span className="truncate mr-2">{account.secretKey}</span>
-                        <button
-                          onClick={() => handleCopy(account.secretKey || '', true)}
-                          className="shrink-0 p-1 text-amber-300 hover:text-white"
-                          title="Copy Private Key"
-                        >
-                          {copiedSecret ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Explorer Link */}
@@ -613,7 +503,7 @@ export function WalletModal({
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Inspect On-Chain on Suiscan</span>
                 </a>
-                <span className="text-[11px] text-slate-400 font-mono">Type: {account.walletType || 'On-Chain'}</span>
+                <span className="text-[11px] text-slate-400 font-mono">Type: Extension</span>
               </div>
 
               {/* Action Buttons */}
@@ -640,39 +530,22 @@ export function WalletModal({
               </div>
             </div>
           ) : (
-            /* Connect Wallet Mode */
-            <div className="space-y-4">
-              {/* Mode Tabs */}
-              <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs font-bold">
+            /* Connect Wallet Mode: Browser Extensions only */
+            <div className="space-y-3.5">
+              {/* Scan bar / status banner */}
+              <div className="flex items-center justify-between px-1 text-xs">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-500" />
+                  Sui Wallet Standard (Auto-Discovery)
+                </span>
                 <button
-                  onClick={() => setActiveTab('extensions')}
-                  className={`py-2 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'extensions'
-                      ? 'bg-white dark:bg-[#1A1E2B] text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
+                  onClick={scanBrowserWallets}
+                  disabled={isScanning}
+                  className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 font-bold cursor-pointer disabled:opacity-50"
+                  title="Rescan browser for newly installed extensions"
                 >
-                  Browser Extension
-                </button>
-                <button
-                  onClick={() => setActiveTab('create')}
-                  className={`py-2 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'create'
-                      ? 'bg-white dark:bg-[#1A1E2B] text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Create New Wallet
-                </button>
-                <button
-                  onClick={() => setActiveTab('import')}
-                  className={`py-2 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'import'
-                      ? 'bg-white dark:bg-[#1A1E2B] text-slate-900 dark:text-white shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Import Key
+                  <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
+                  <span>{isScanning ? 'Scanning...' : 'Rescan'}</span>
                 </button>
               </div>
 
@@ -684,160 +557,68 @@ export function WalletModal({
                 </div>
               )}
 
-              {/* TAB 1: Browser Extensions */}
-              {activeTab === 'extensions' && (
-                <div className="space-y-3">
-                  {/* Scan bar / status banner */}
-                  <div className="flex items-center justify-between px-1 text-xs">
-                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-cyan-500" />
-                      Sui Wallet Standard (Auto-Discovery)
-                    </span>
-                    <button
-                      onClick={scanBrowserWallets}
-                      disabled={isScanning}
-                      className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 font-bold cursor-pointer disabled:opacity-50"
-                      title="Rescan browser for newly installed extensions"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
-                      <span>{isScanning ? 'Scanning...' : 'Rescan'}</span>
-                    </button>
-                  </div>
-
-                  {/* Wallet Cards List */}
-                  <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1 scrollbar-thin">
-                    {walletList.map((wallet) => (
-                      <button
-                        key={wallet.id}
-                        onClick={() => handleConnectExtension(wallet)}
-                        disabled={isConnecting}
-                        className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left cursor-pointer group ${
-                          wallet.isDetected
-                            ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/40 hover:border-emerald-500/70 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/15 ring-1 ring-emerald-500/20'
-                            : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border-slate-200 dark:border-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-md shrink-0 ${
-                            wallet.isDetected
-                              ? 'bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/20'
-                              : 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-cyan-500/20'
-                          }`}>
-                            {wallet.icon ? (
-                              <img src={wallet.icon} alt={wallet.name} className="w-6 h-6 rounded-lg object-contain" />
-                            ) : (
-                              wallet.name.slice(0, 2).toUpperCase()
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
-                                {wallet.name}
-                              </span>
-                              {wallet.isDetected ? (
-                                <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 animate-pulse">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  Detected &amp; Ready
-                                </span>
-                              ) : (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400">
-                                  Extension
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                              {wallet.isDetected
-                                ? 'Click to connect wallet securely via Sui Standard'
-                                : wallet.description}
-                            </p>
-                          </div>
-                        </div>
-
-                        {wallet.isDetected ? (
-                          <div className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-[11px] font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                            Connect
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors shrink-0">
-                            <span>Get</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-slate-100/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2">
-                    <Zap className="w-4 h-4 text-cyan-500 shrink-0 mt-0.5" />
-                    <span>
-                      Don&apos;t have a browser extension installed? Use <strong>Create New Wallet</strong> to generate a live on-chain Sui keypair in 1 click right in your browser!
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 2: Instant Create New Sui Wallet */}
-              {activeTab === 'create' && (
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3.5">
-                  <div className="flex items-start gap-2.5">
-                    <Sparkles className="w-5 h-5 text-cyan-500 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                        Create Instant Sui Web Wallet
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                        Generates a genuine Ed25519 cryptographic keypair and Sui Mainnet address right now in your browser. No browser extension required.
-                      </p>
-                    </div>
-                  </div>
-
+              {/* Wallet Cards List */}
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                {walletList.map((wallet) => (
                   <button
-                    onClick={handleCreateNewSuiWallet}
+                    key={wallet.id}
+                    onClick={() => handleConnectExtension(wallet)}
                     disabled={isConnecting}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-600 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-cyan-600/30 cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left cursor-pointer group ${
+                      wallet.isDetected
+                        ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/40 hover:border-emerald-500/70 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/15 ring-1 ring-emerald-500/20'
+                        : 'bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border-slate-200 dark:border-white/10'
+                    }`}
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>{isConnecting ? 'Generating Keypair...' : 'Generate New Sui Wallet'}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* TAB 3: Import Existing Sui Private Key */}
-              {activeTab === 'import' && (
-                <form onSubmit={handleImportKey} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Sui Private Key (Bech32 or Hex)
-                    </label>
-                    <input
-                      type="password"
-                      value={importKey}
-                      onChange={(e) => setImportKey(e.target.value)}
-                      placeholder="suiprivkey1..."
-                      className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-white/10 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                      required
-                    />
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                      Paste your Bech32 encoded Sui private key to log into WalCare with your existing wallet.
-                    </p>
-                  </div>
-
-                  {importError && (
-                    <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs">
-                      {importError}
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-md shrink-0 ${
+                        wallet.isDetected
+                          ? 'bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-emerald-500/20'
+                          : 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-cyan-500/20'
+                      }`}>
+                        {wallet.icon ? (
+                          <img src={wallet.icon} alt={wallet.name} className="w-6 h-6 rounded-lg object-contain" />
+                        ) : (
+                          wallet.name.slice(0, 2).toUpperCase()
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                            {wallet.name}
+                          </span>
+                          {wallet.isDetected ? (
+                            <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Detected &amp; Ready
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400">
+                              Extension
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {wallet.isDetected
+                            ? 'Click to connect wallet securely via Sui Standard'
+                            : wallet.description}
+                        </p>
+                      </div>
                     </div>
-                  )}
 
-                  <button
-                    type="submit"
-                    disabled={isConnecting || !importKey.trim()}
-                    className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md shadow-purple-600/20 cursor-pointer transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    <span>{isConnecting ? 'Validating Key...' : 'Import & Connect'}</span>
+                    {wallet.isDetected ? (
+                      <div className="px-3 py-1 rounded-xl bg-emerald-600 text-white text-[11px] font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                        Connect
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors shrink-0">
+                        <span>Get</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </div>
+                    )}
                   </button>
-                </form>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </div>

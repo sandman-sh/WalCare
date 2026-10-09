@@ -48,9 +48,8 @@ When asked about Ibuprofen, **WalCare (KIRO AI)** immediately intercepts the que
 - **Tier 2: Walrus Console Storage**: Decentralized document vault for patient lab results, ECG rhythm strips, and clinical shift handovers. Employs SEAL threshold encryption policies and live blob lookup on `walruscan.com`.
 
 ### 4. 🔗 Sui Wallet Authentication
-- **Multi-Wallet Support**: Native Sui Wallet Standard auto-discovery for Slush (Mysten Labs official Sui wallet), Surf Wallet, Suiet, and Nightly.
-- **In-Browser Keypair Generation**: Generates genuine Ed25519 cryptographic keypairs and Sui Mainnet addresses with live on-chain balance querying.
-- **Private Key Import**: Direct authentication using Bech32 (`suiprivkey...`) or Hex private keys.
+- **Multi-Wallet Support**: Native Sui Wallet Standard auto-discovery and live authentication for official Sui browser extensions including Slush (Mysten Labs official Sui wallet), Surf Wallet, Suiet, and Nightly.
+- **Live On-Chain Telemetry**: Live balance querying and on-chain identity binding on Sui Mainnet.
 
 ### 5. 📊 Real-Time Biometrics & Fitness Tracker
 - **Mathematical BMI Calculation**: Real-time dynamic calculation ($BMI = kg / m^2$) with live slider controls, weight/height calibration, and healthy range status.
