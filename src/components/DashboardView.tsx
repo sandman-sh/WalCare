@@ -27,8 +27,9 @@ import {
   User,
 } from 'lucide-react';
 import { AnatomicalVisualizer, OrganType } from './AnatomicalVisualizer';
-import { Caregiver } from '@/types/carecircle';
+import { Caregiver, UserProfile } from '@/types/carecircle';
 import { ActiveTab } from './Sidebar';
+import { SuiAccount } from './WalletModal';
 
 interface DashboardViewProps {
   activeCaregiver: Caregiver;
@@ -36,6 +37,10 @@ interface DashboardViewProps {
   onQuickAskAI: (prompt: string) => void;
   totalBlobs: number;
   totalDocs: number;
+  userProfile?: UserProfile | null;
+  suiAccount?: SuiAccount | null;
+  isGuestMode?: boolean;
+  onSaveUserProfile?: (profile: UserProfile) => Promise<void>;
 }
 
 export function DashboardView({
@@ -44,6 +49,10 @@ export function DashboardView({
   onQuickAskAI,
   totalBlobs,
   totalDocs,
+  userProfile,
+  suiAccount,
+  isGuestMode = false,
+  onSaveUserProfile,
 }: DashboardViewProps) {
   const [selectedOrgan, setSelectedOrgan] = useState<OrganType>('heart');
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<number>(2);
@@ -72,26 +81,38 @@ export function DashboardView({
   // Save Feedback Toast
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Load saved metrics from localStorage on initial render
+  const isPersonalUser = !isGuestMode && !!suiAccount;
+  const patientDisplayName = isPersonalUser ? (userProfile?.name || 'Your Profile') : 'Eleanor Vance';
+
+  // Load saved metrics from localStorage or userProfile
   useEffect(() => {
-    try {
-      const savedVitals = localStorage.getItem('walcare_patient_vitals');
-      if (savedVitals) {
-        const parsed = JSON.parse(savedVitals);
-        if (parsed.weightKg) setWeightKg(parsed.weightKg);
-        if (parsed.heightCm) setHeightCm(parsed.heightCm);
-        if (parsed.systolicBp) setSystolicBp(parsed.systolicBp);
-        if (parsed.diastolicBp) setDiastolicBp(parsed.diastolicBp);
-        if (parsed.heartRate) setHeartRate(parsed.heartRate);
-        if (parsed.bloodCount) setBloodCount(parsed.bloodCount);
-        if (parsed.glucose) setGlucose(parsed.glucose);
-        if (parsed.dailySteps) setDailySteps(parsed.dailySteps);
-        if (parsed.waterLiters) setWaterLiters(parsed.waterLiters);
+    if (!isGuestMode && suiAccount && userProfile) {
+      if (userProfile.weightKg) setWeightKg(userProfile.weightKg);
+      if (userProfile.heightCm) setHeightCm(userProfile.heightCm);
+      if (userProfile.systolicBp) setSystolicBp(userProfile.systolicBp);
+      if (userProfile.diastolicBp) setDiastolicBp(userProfile.diastolicBp);
+      if (userProfile.heartRate) setHeartRate(userProfile.heartRate);
+      if (userProfile.glucose) setGlucose(userProfile.glucose);
+    } else {
+      try {
+        const savedVitals = localStorage.getItem('walcare_patient_vitals');
+        if (savedVitals) {
+          const parsed = JSON.parse(savedVitals);
+          if (parsed.weightKg) setWeightKg(parsed.weightKg);
+          if (parsed.heightCm) setHeightCm(parsed.heightCm);
+          if (parsed.systolicBp) setSystolicBp(parsed.systolicBp);
+          if (parsed.diastolicBp) setDiastolicBp(parsed.diastolicBp);
+          if (parsed.heartRate) setHeartRate(parsed.heartRate);
+          if (parsed.bloodCount) setBloodCount(parsed.bloodCount);
+          if (parsed.glucose) setGlucose(parsed.glucose);
+          if (parsed.dailySteps) setDailySteps(parsed.dailySteps);
+          if (parsed.waterLiters) setWaterLiters(parsed.waterLiters);
+        }
+      } catch (e) {
+        console.warn('Could not load saved vitals:', e);
       }
-    } catch (e) {
-      console.warn('Could not load saved vitals:', e);
     }
-  }, []);
+  }, [userProfile, isGuestMode, suiAccount]);
 
   // Compute live BMI dynamically
   const heightM = heightCm / 100;
@@ -147,14 +168,27 @@ export function DashboardView({
 
     localStorage.setItem('walcare_patient_vitals', JSON.stringify(vitalsPayload));
 
+    if (!isGuestMode && suiAccount && userProfile && onSaveUserProfile) {
+      await onSaveUserProfile({
+        ...userProfile,
+        weightKg,
+        heightCm,
+        computedBmi,
+        systolicBp,
+        diastolicBp,
+        heartRate,
+        glucose,
+      });
+    }
+
     // Also persist observation to live Walrus Memory
     try {
       await fetch('/api/memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: `Patient Eleanor Vance Vitals Update: BP ${systolicBp}/${diastolicBp} mmHg, Heart Rate ${heartRate} bpm, Glucose ${glucose} mg/dL, Weight ${weightKg} kg, BMI ${computedBmi}. Recorded by ${activeCaregiver.name}.`,
-          authorId: activeCaregiver.id,
+          text: `Patient ${patientDisplayName} Vitals Update: BP ${systolicBp}/${diastolicBp} mmHg, Heart Rate ${heartRate} bpm, Glucose ${glucose} mg/dL, Weight ${weightKg} kg, BMI ${computedBmi}. Recorded by ${isPersonalUser ? patientDisplayName : activeCaregiver.name}.`,
+          authorId: isPersonalUser ? (suiAccount?.address || 'user') : activeCaregiver.id,
           category: 'vitals',
           isSafetyCritical: heartRate >= 115 || systolicBp >= 145 || glucose >= 180,
         }),
@@ -314,7 +348,7 @@ export function DashboardView({
               title="Click to view full health profile"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-              Patient Profile (88yo)
+              {patientDisplayName} {userProfile?.age ? `(${userProfile.age}yo)` : ''}
             </button>
           </div>
 
@@ -347,7 +381,7 @@ export function DashboardView({
           {/* Call Telehealth Button */}
           <button
             onClick={() =>
-              alert('WalCare Telehealth: Calling Dr. Rachel Greene (Cardiology RN) for Eleanor Vance.')
+              alert(`WalCare Telehealth: Calling care team for ${patientDisplayName}.`)
             }
             className="p-2.5 rounded-full bg-white dark:bg-[#171A24] hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer shadow-xs"
             title="Call Care Team Telehealth"
@@ -358,7 +392,7 @@ export function DashboardView({
           {/* Notification Bell */}
           <button
             onClick={() =>
-              alert(`WalCare Alerts:\n• Acute Gastritis flag: NSAID safety rule active\n• 30 Walrus on-chain blobs synced\n• ${totalDocs} Walrus Console medical documents loaded`)
+              alert(`WalCare Alerts:\n• Health monitoring: Active\n• 30 Walrus on-chain blobs synced\n• ${totalDocs} Walrus Console medical documents loaded`)
             }
             className="relative p-2.5 rounded-full bg-white dark:bg-[#171A24] hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer shadow-xs"
             title="Care Alerts"
@@ -371,7 +405,7 @@ export function DashboardView({
           <div className="flex items-center gap-2 pl-2.5 pr-3 py-1 rounded-full bg-white dark:bg-[#171A24] border border-slate-200 dark:border-white/10 shadow-xs">
             <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
             <span className="text-xs font-bold text-slate-900 dark:text-white hidden sm:inline">
-              {activeCaregiver.name}
+              {isPersonalUser ? (userProfile?.name || 'My Profile') : activeCaregiver.name}
             </span>
           </div>
         </div>
@@ -389,6 +423,7 @@ export function DashboardView({
               onNavigateToTab('chat');
             }}
             heartRate={heartRate}
+            patientName={patientDisplayName}
           />
         </div>
 
@@ -546,7 +581,7 @@ export function DashboardView({
               {/* 1. Blood Status (Teal Card) */}
               <div
                 onClick={() =>
-                  onQuickAskAI(`Eleanor’s blood pressure is ${systolicBp}/${diastolicBp} mmHg. How does this compare with baseline?`)
+                  onQuickAskAI(`${patientDisplayName}’s blood pressure is ${systolicBp}/${diastolicBp} mmHg. How does this compare with baseline?`)
                 }
                 className="group flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white cursor-pointer transition-all duration-300 shadow-md shadow-teal-900/20 hover:scale-[1.02]"
               >
@@ -565,7 +600,7 @@ export function DashboardView({
               {/* 2. Heart Rate (Indigo Card) */}
               <div
                 onClick={() =>
-                  onQuickAskAI(`Show Eleanor’s telemetry notes on Atrial Fibrillation with heart rate of ${heartRate} bpm.`)
+                  onQuickAskAI(`Show telemetry notes on heart rate of ${heartRate} bpm for ${patientDisplayName}.`)
                 }
                 className="group flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white cursor-pointer transition-all duration-300 shadow-md shadow-indigo-900/20 hover:scale-[1.02]"
               >
@@ -584,7 +619,7 @@ export function DashboardView({
               {/* 3. Blood Count (Crimson Card) */}
               <div
                 onClick={() =>
-                  onQuickAskAI('Check Eleanor’s hemoglobin and blood count related to GI melena.')
+                  onQuickAskAI(`Check ${patientDisplayName}’s hemoglobin and blood count telemetry from Walrus records.`)
                 }
                 className="group flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white cursor-pointer transition-all duration-300 shadow-md shadow-rose-900/20 hover:scale-[1.02]"
               >
@@ -603,7 +638,7 @@ export function DashboardView({
               {/* 4. Glucose (Orange Card) */}
               <div
                 onClick={() =>
-                  onQuickAskAI(`Review Eleanor’s post-meal glucose level of ${glucose} mg/dL.`)
+                  onQuickAskAI(`Review ${patientDisplayName}’s post-meal glucose level of ${glucose} mg/dL.`)
                 }
                 className="group flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white cursor-pointer transition-all duration-300 shadow-md shadow-amber-900/20 hover:scale-[1.02]"
               >

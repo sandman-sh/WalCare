@@ -129,15 +129,30 @@ Provide generic baseline information only. Do NOT remember past vitals, gastriti
   }
 
   // Active patient data: use logged-in user profile if provided, otherwise default Eleanor Vance profile
-  const patientName = userProfile?.name || PATIENT_PROFILE.name;
-  const patientAge = userProfile?.age || PATIENT_PROFILE.age;
-  const patientGender = userProfile?.gender || 'female';
-  const bloodGroup = userProfile?.bloodGroup || 'O+';
-  const conditions = userProfile?.primaryConditions?.join(', ') || PATIENT_PROFILE.primaryConditions.join(', ');
-  const allergies = userProfile?.knownAllergies?.join(', ') || PATIENT_PROFILE.knownAllergies.join(', ');
-  const medications = userProfile?.currentMedications?.map((m) => `${m.name} (${m.dosage}, ${m.frequency})`).join('; ') || 'Meloxicam 7.5mg (STOPPED due to bleeding), Lisinopril 10mg daily, Donepezil 5mg night';
-  const emergencyContact = userProfile?.emergencyContact ? `${userProfile.emergencyContact.name} (${userProfile.emergencyContact.relation}, ${userProfile.emergencyContact.phone})` : 'Sarah Miller (Daughter, +1-555-0192)';
-  const currentVitals = userProfile ? `Height: ${userProfile.heightCm}cm, Weight: ${userProfile.weightKg}kg, BMI: ${userProfile.computedBmi}, BP: ${userProfile.systolicBp}/${userProfile.diastolicBp} mmHg, Pulse: ${userProfile.heartRate} bpm, Glucose: ${userProfile.glucose} mg/dL` : 'Height: 162cm, Weight: 64kg, BMI: 24.4, BP: 138/85 mmHg, Pulse: 110 bpm';
+  const isPersonalUser = !!userProfile?.walletAddress;
+  const patientName = userProfile?.name
+    ? userProfile.name
+    : (isPersonalUser ? 'You' : PATIENT_PROFILE.name);
+  const patientAge = userProfile?.age
+    ? userProfile.age
+    : (isPersonalUser ? 'Not set' : PATIENT_PROFILE.age);
+  const patientGender = userProfile?.gender || (isPersonalUser ? 'Not set' : 'female');
+  const bloodGroup = userProfile?.bloodGroup || (isPersonalUser ? 'Not set' : 'O+');
+  const conditions = isPersonalUser
+    ? (userProfile.primaryConditions && userProfile.primaryConditions.length > 0 ? userProfile.primaryConditions.join(', ') : 'None documented yet')
+    : PATIENT_PROFILE.primaryConditions.join(', ');
+  const allergies = isPersonalUser
+    ? (userProfile.knownAllergies && userProfile.knownAllergies.length > 0 ? userProfile.knownAllergies.join(', ') : 'None documented yet')
+    : PATIENT_PROFILE.knownAllergies.join(', ');
+  const medications = isPersonalUser
+    ? (userProfile.currentMedications && userProfile.currentMedications.length > 0 ? userProfile.currentMedications.map((m) => `${m.name} (${m.dosage}, ${m.frequency})`).join('; ') : 'None documented yet')
+    : 'Meloxicam 7.5mg (STOPPED due to bleeding), Lisinopril 10mg daily, Donepezil 5mg night';
+  const emergencyContact = userProfile?.emergencyContact?.name
+    ? `${userProfile.emergencyContact.name} (${userProfile.emergencyContact.relation}, ${userProfile.emergencyContact.phone})`
+    : (isPersonalUser ? 'None set' : 'Sarah Miller (Daughter, +1-555-0192)');
+  const currentVitals = isPersonalUser
+    ? `Height: ${userProfile.heightCm || 0}cm, Weight: ${userProfile.weightKg || 0}kg, BMI: ${userProfile.computedBmi || 0}, BP: ${userProfile.systolicBp || 0}/${userProfile.diastolicBp || 0} mmHg, Pulse: ${userProfile.heartRate || 0} bpm, Glucose: ${userProfile.glucose || 0} mg/dL`
+    : 'Height: 162cm, Weight: 64kg, BMI: 24.4, BP: 138/85 mmHg, Pulse: 110 bpm';
 
   const memoryBlock = recalledMemories.length > 0
     ? recalledMemories
@@ -349,7 +364,8 @@ function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletio
   const { caregiver, recalledMemories, isAmnesiaMode, userProfile } = options;
   const lastUserMsg = options.messages[options.messages.length - 1]?.content || '';
   const q = lastUserMsg.toLowerCase();
-  const patientName = userProfile?.name || 'Eleanor Vance';
+  const isPersonalUser = !!userProfile?.walletAddress;
+  const patientName = userProfile?.name || (isPersonalUser ? 'Your Profile' : 'Eleanor Vance');
 
   if (isAmnesiaMode) {
     if (q.includes('ibuprofen') || q.includes('advil') || q.includes('headache')) {
@@ -367,7 +383,7 @@ function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletio
   // Natural language vitals update handler
   if (q.includes('weight') || q.includes('bp') || q.includes('pulse') || q.includes('blood pressure')) {
     const parsed = parseExtractionAndActions(
-      `I have received and recorded your updated biometric data in ${patientName}'s clinical profile and decentralized Walrus Memory. Your BMI and vital trends have been recalculated automatically.`,
+      `I have received and recorded your updated biometric data in ${isPersonalUser ? 'your' : `${patientName}'s`} clinical profile and decentralized Walrus Memory. Your BMI and vital trends have been recalculated automatically.`,
       lastUserMsg,
       userProfile
     );
@@ -382,20 +398,14 @@ function generateClinicalFallback(options: OpenRouterChatOptions): ChatCompletio
   // Cross-memory clinical synthesis:
   if (q.includes('ibuprofen') || q.includes('advil') || q.includes('headache')) {
     return {
-      reply: `[CLINICAL ALERT] **CRITICAL SAFETY WARNING: Do NOT administer Ibuprofen to ${patientName}.**
+      reply: `[CLINICAL ALERT] **CRITICAL SAFETY WARNING: Check Contraindications for ${patientName}.**
 
-I am **KIRO**, and I have cross-referenced ${patientName}'s decentralized Walrus Memory records across the care team:
-1. **Daughter Sarah (Oct 3)** documented dark tarry specks in stool (\`Blob 0x9928...\`).
-2. **Nurse Elena (Oct 4)** confirmed epigastric tenderness and issued an explicit clinical prohibition against NSAIDs due to acute gastrointestinal hemorrhage risk (\`Blob 0xccbb...\`).
-3. **Oct 4 Postural Vitals Drop**: Standing BP plunged to 102/64 mmHg with acute dizziness.
-
-**Action Plan:**
-• Ibuprofen is an NSAID that irritates the gastric mucosa and can precipitate gastrointestinal bleeding.
-• Recommend **Acetaminophen (Tylenol) 500mg** instead, provided physician has authorized it.
-• Keep patient resting with head elevated and monitor hydration.
-• If discomfort persists or melena recurs, notify Dr. Adams immediately.`,
+I am **KIRO**, and I have cross-referenced ${isPersonalUser ? 'your' : `${patientName}'s`} decentralized Walrus Memory records on Sui:
+1. **Clinical Safety Rule**: NSAIDs like Ibuprofen irritate the gastric mucosa and can precipitate gastrointestinal flare-ups.
+2. **Recorded Allergies/Contraindications**: ${userProfile?.knownAllergies?.join(', ') || (isPersonalUser ? 'None documented yet' : 'NSAIDs (Melena / Acute Gastritis risk)')}.
+3. **Safety Recommendation**: If mild pain relief is needed, consult a clinician or consider Acetaminophen (Tylenol), provided no hepatic contraindications exist.`,
       extractedFact: {
-        text: `Query regarding headache relief; NSAID administration blocked due to GI history.`,
+        text: `Query regarding headache relief; NSAID administration analyzed against Walrus records.`,
         category: 'medication',
         isSafetyCritical: true,
       },
@@ -404,15 +414,14 @@ I am **KIRO**, and I have cross-referenced ${patientName}'s decentralized Walrus
   }
 
   return {
-    reply: `Hello! I am **KIRO**, your personalized clinical health AI partner. I am connected to ${patientName}'s decentralized Walrus Memory vault on Sui.
+    reply: `Hello! I am **KIRO**, your personalized clinical health AI partner. I am connected to ${isPersonalUser ? 'your' : `${patientName}'s`} decentralized Walrus Memory vault on Sui.
 
 I can help you:
 • Review and update vitals or biometrics in real-time (e.g. "My weight is 64kg and BP is 120/80")
-• Cross-reference caregiver observations between family and visiting nurses
-• Validate medication safety and drug contraindications
-• Manage medical reports in Walrus Console storage
+• Cross-reference medical history, allergies, and contraindications
+• Search your stored medical records and Walrus blobs
 
-How can I assist ${patientName}'s care today?`,
-    modelUsed: 'KIRO Clinical Synthesis (Walrus Memory)',
+How can I assist your health care today?`,
+    modelUsed: 'KIRO Health Assistant (Walrus Memory)',
   };
 }

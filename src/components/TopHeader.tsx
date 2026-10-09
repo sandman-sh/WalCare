@@ -28,6 +28,7 @@ interface TopHeaderProps {
   onConnectWallet?: () => void;
   userProfile?: UserProfile;
   onOpenProfile?: () => void;
+  isGuestMode?: boolean;
 }
 
 export function TopHeader({
@@ -42,6 +43,7 @@ export function TopHeader({
   onConnectWallet,
   userProfile,
   onOpenProfile,
+  isGuestMode = false,
 }: TopHeaderProps) {
   const { theme, toggleTheme } = useTheme();
 
@@ -63,27 +65,34 @@ export function TopHeader({
           </h2>
 
           {/* Patient Walrus Avatar Tag */}
-          {userProfile && (
+          {!isGuestMode && suiAccount && (
             <button
               onClick={onOpenProfile}
               className="hidden lg:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer shrink-0"
               title="Click to view & edit patient profile"
             >
               <div className="w-5 h-5 rounded-full overflow-hidden bg-purple-600 flex items-center justify-center shrink-0">
-                {userProfile.avatarUrl ? (
-                  <img src={userProfile.avatarUrl} alt={userProfile.name} className="w-full h-full object-cover" />
+                {userProfile?.avatarUrl ? (
+                  <img src={userProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[10px] font-bold text-white">E</span>
+                  <span className="text-[10px] font-bold text-white">
+                    {userProfile?.name ? userProfile.name.charAt(0).toUpperCase() : suiAccount.address.slice(2, 3).toUpperCase()}
+                  </span>
                 )}
               </div>
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{userProfile.name}</span>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {userProfile?.name || 'Setup Profile'}
+              </span>
             </button>
           )}
 
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 dark:bg-white/5 border border-purple-500/20 dark:border-white/10 shrink-0">
-            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Persona:</span>
-            <span className="text-xs font-bold text-purple-700 dark:text-purple-300">{activeCaregiver.name}</span>
-          </div>
+          {/* Persona badge — only in Guest mode */}
+          {(isGuestMode || !suiAccount) && (
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/20 dark:border-amber-500/10 shrink-0">
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-amber-400/70">Guest Persona:</span>
+              <span className="text-xs font-bold text-amber-700 dark:text-amber-300">{activeCaregiver.name}</span>
+            </div>
+          )}
         </div>
       </div>
 

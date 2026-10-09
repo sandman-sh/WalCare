@@ -20,9 +20,10 @@ import {
   Utensils,
   Check,
 } from 'lucide-react';
-import { Caregiver, ChatMessage, MemoryCategory } from '@/types/carecircle';
+import { Caregiver, ChatMessage, MemoryCategory, UserProfile } from '@/types/carecircle';
 import { CAREGIVERS } from '@/lib/seedData';
 import { MascotHero } from './MascotHero';
+import { SuiAccount } from './WalletModal';
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
@@ -32,6 +33,10 @@ interface ChatInterfaceProps {
   onCaregiverChange?: (cg: Caregiver) => void;
   isAmnesiaMode: boolean;
   onOpenDiffModal: (userPrompt: string, memoryReply: string, amnesiaReply: string) => void;
+  userProfile?: UserProfile | null;
+  suiAccount?: SuiAccount | null;
+  isGuestMode?: boolean;
+  onSwitchToGuest?: () => void;
 }
 
 function parseInlineMarkdown(text: string): React.ReactNode {
@@ -139,6 +144,10 @@ export function ChatInterface({
   onCaregiverChange,
   isAmnesiaMode,
   onOpenDiffModal,
+  userProfile,
+  suiAccount,
+  isGuestMode = false,
+  onSwitchToGuest,
 }: ChatInterfaceProps) {
   const [inputText, setInputText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MemoryCategory>('general');
@@ -204,6 +213,8 @@ export function ChatInterface({
         {messages.length === 0 ? (
           <MascotHero
             activeCaregiverName={activeCaregiver.name}
+            userProfile={userProfile}
+            isGuestMode={isGuestMode}
             onSelectPrompt={(prompt) => {
               setInputText(prompt);
               if (textareaRef.current) {
@@ -421,31 +432,60 @@ export function ChatInterface({
       {/* Input Area */}
       <div className="p-4 sm:p-6 bg-white/90 dark:bg-[#12151E]/90 backdrop-blur-xl border-t border-slate-200 dark:border-white/5 relative z-20 transition-colors">
         <div className="max-w-4xl mx-auto space-y-2.5">
-          {/* CareCircle Multiplayer Active Speaker Bar */}
+          {/* Active Speaker Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-none border-b border-slate-200/80 dark:border-white/5">
-            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 mr-1 shrink-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Speaking As:</span>
-            </span>
-            {CAREGIVERS.map((cg) => {
-              const isSelected = activeCaregiver.id === cg.id;
-              return (
-                <button
-                  key={cg.id}
-                  type="button"
-                  onClick={() => onCaregiverChange?.(cg)}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-white/30'
-                      : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/5'
-                  }`}
-                  title={`Switch active speaker to ${cg.name} (${cg.role})`}
-                >
-                  <span>{cg.name}</span>
-                  <span className="text-[9px] opacity-75 font-normal">({cg.badge || cg.role})</span>
-                </button>
-              );
-            })}
+            {!isGuestMode && suiAccount ? (
+              /* Wallet Authenticated Speaker */
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 shrink-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Speaking As:</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-cyan-600 to-purple-600 text-white shadow-sm shrink-0">
+                    <span>{userProfile?.name || `Sui User (${suiAccount.address.slice(0, 6)}...)`}</span>
+                    <span className="text-[9px] opacity-80 font-normal">(Account Owner)</span>
+                  </div>
+                </div>
+
+                {onSwitchToGuest && (
+                  <button
+                    type="button"
+                    onClick={onSwitchToGuest}
+                    className="text-[11px] text-amber-500 hover:text-amber-400 font-semibold cursor-pointer shrink-0 transition-colors"
+                  >
+                    Test Demo Personas
+                  </button>
+                )}
+              </div>
+            ) : (
+              /* Guest Mode Caregiver Personas */
+              <>
+                <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 mr-1 shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Speaking As:</span>
+                </span>
+                {CAREGIVERS.map((cg) => {
+                  const isSelected = activeCaregiver.id === cg.id;
+                  return (
+                    <button
+                      key={cg.id}
+                      type="button"
+                      onClick={() => onCaregiverChange?.(cg)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-white/30'
+                          : 'bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/5'
+                      }`}
+                      title={`Switch active speaker to ${cg.name} (${cg.role})`}
+                    >
+                      <span>{cg.name}</span>
+                      <span className="text-[9px] opacity-75 font-normal">({cg.badge || cg.role})</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
 
           {/* Category Chips Bar */}
@@ -482,7 +522,11 @@ export function ChatInterface({
                 onChange={handleInputResize}
                 onKeyDown={handleKeyDown}
                 rows={1}
-                placeholder={`Ask WalCare AI or log an observation for Eleanor Vance (${activeCaregiver.name})...`}
+                placeholder={
+                  !isGuestMode && suiAccount
+                    ? `Ask KIRO AI or log observations for ${userProfile?.name || 'your profile'}...`
+                    : `Ask WalCare AI or log an observation for Eleanor Vance (${activeCaregiver.name})...`
+                }
                 className="w-full py-3 pl-4 pr-10 text-sm text-slate-900 dark:text-white placeholder-slate-400 bg-transparent resize-none focus:outline-none max-h-36"
               />
             </div>

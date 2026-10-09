@@ -4,50 +4,97 @@ import React from 'react';
 import Image from 'next/image';
 import { Pill, Activity, FileText, Footprints, Sparkles, Heart, Shield } from 'lucide-react';
 
+import { UserProfile } from '@/types/carecircle';
+
 interface MascotHeroProps {
   onSelectPrompt: (prompt: string) => void;
   activeCaregiverName: string;
+  userProfile?: UserProfile | null;
+  isGuestMode?: boolean;
 }
 
-export function MascotHero({ onSelectPrompt, activeCaregiverName }: MascotHeroProps) {
-  const suggestions = [
-    {
-      icon: <Pill className="w-4 h-4 text-rose-500 dark:text-rose-400" />,
-      title: 'Safety Contraindication Probe',
-      label: 'Can I give Eleanor 400mg Ibuprofen for headache?',
-      prompt: 'Eleanor has a headache this afternoon. Can I give her 400mg Ibuprofen (Advil)?',
-      border: 'border-rose-500/20 hover:border-rose-500/50',
-      badge: 'Critical Safety Test',
-      badgeColor: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30',
-    },
-    {
-      icon: <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />,
-      title: 'Natural Language Vitals Update',
-      label: 'Log BP 120/80, pulse 72 bpm, weight 64 kg',
-      prompt: 'Update Eleanor’s vitals: Blood pressure is 120/80 mmHg, heart rate is 72 bpm, weight is 64 kg.',
-      border: 'border-teal-500/20 hover:border-teal-500/50',
-      badge: 'Natural Language Bot Action',
-      badgeColor: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30',
-    },
-    {
-      icon: <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
-      title: 'Decentralized Memory Recall',
-      label: 'Summarize what Nurse Elena reported today',
-      prompt: 'Can you summarize what Nurse Elena reported during her shift regarding Eleanor’s medication and stomach flare?',
-      border: 'border-purple-500/20 hover:border-purple-500/50',
-      badge: 'Walrus Memory',
-      badgeColor: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
-    },
-    {
-      icon: <Footprints className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
-      title: 'Natural Language Observation Save',
-      label: 'Remember that Eleanor had mild morning fatigue',
-      prompt: 'Remember in Walrus Memory that Eleanor experienced mild morning fatigue and needed arm support for standing.',
-      border: 'border-cyan-500/20 hover:border-cyan-500/50',
-      badge: 'Persist to Walrus',
-      badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
-    },
-  ];
+export function MascotHero({ onSelectPrompt, activeCaregiverName, userProfile, isGuestMode = false }: MascotHeroProps) {
+  const isPersonalUser = !isGuestMode && !!userProfile?.walletAddress;
+  const patientDisplayName = isPersonalUser ? (userProfile?.name || 'You') : 'Eleanor Vance';
+  const possessive = isPersonalUser ? (userProfile?.name ? `${userProfile.name}'s` : 'my') : 'Eleanor’s';
+
+  const suggestions = isPersonalUser
+    ? [
+        {
+          icon: <Pill className="w-4 h-4 text-rose-500 dark:text-rose-400" />,
+          title: 'Safety Contraindication Probe',
+          label: 'Can I take 400mg Ibuprofen for a headache?',
+          prompt: 'Can I take 400mg Ibuprofen (Advil) for a headache? Please cross-reference my health profile and Walrus records.',
+          border: 'border-rose-500/20 hover:border-rose-500/50',
+          badge: 'Safety Check',
+          badgeColor: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30',
+        },
+        {
+          icon: <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />,
+          title: 'Natural Language Vitals Update',
+          label: 'Log BP 120/80, pulse 72 bpm, weight 68 kg',
+          prompt: 'Update my vitals: Blood pressure is 120/80 mmHg, heart rate is 72 bpm, weight is 68 kg.',
+          border: 'border-teal-500/20 hover:border-teal-500/50',
+          badge: 'Biometric Action',
+          badgeColor: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30',
+        },
+        {
+          icon: <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+          title: 'Health Profile Analysis',
+          label: 'Analyze my clinical profile & recommendations',
+          prompt: 'Analyze my personalized clinical health profile and summarize key medical recommendations and precautions.',
+          border: 'border-purple-500/20 hover:border-purple-500/50',
+          badge: 'Walrus Memory',
+          badgeColor: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
+        },
+        {
+          icon: <Footprints className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
+          title: 'Natural Language Observation Save',
+          label: 'Record that I experienced mild morning fatigue',
+          prompt: 'Remember in Walrus Memory that I experienced mild morning fatigue and needed extra rest after breakfast.',
+          border: 'border-cyan-500/20 hover:border-cyan-500/50',
+          badge: 'Persist to Walrus',
+          badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
+        },
+      ]
+    : [
+        {
+          icon: <Pill className="w-4 h-4 text-rose-500 dark:text-rose-400" />,
+          title: 'Safety Contraindication Probe',
+          label: 'Can I give Eleanor 400mg Ibuprofen for headache?',
+          prompt: 'Eleanor has a headache this afternoon. Can I give her 400mg Ibuprofen (Advil)?',
+          border: 'border-rose-500/20 hover:border-rose-500/50',
+          badge: 'Critical Safety Test',
+          badgeColor: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30',
+        },
+        {
+          icon: <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />,
+          title: 'Natural Language Vitals Update',
+          label: 'Log BP 120/80, pulse 72 bpm, weight 64 kg',
+          prompt: 'Update Eleanor’s vitals: Blood pressure is 120/80 mmHg, heart rate is 72 bpm, weight is 64 kg.',
+          border: 'border-teal-500/20 hover:border-teal-500/50',
+          badge: 'Natural Language Bot Action',
+          badgeColor: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30',
+        },
+        {
+          icon: <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+          title: 'Decentralized Memory Recall',
+          label: 'Summarize what Nurse Elena reported today',
+          prompt: 'Can you summarize what Nurse Elena reported during her shift regarding Eleanor’s medication and stomach flare?',
+          border: 'border-purple-500/20 hover:border-purple-500/50',
+          badge: 'Walrus Memory',
+          badgeColor: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30',
+        },
+        {
+          icon: <Footprints className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />,
+          title: 'Natural Language Observation Save',
+          label: 'Remember that Eleanor had mild morning fatigue',
+          prompt: 'Remember in Walrus Memory that Eleanor experienced mild morning fatigue and needed arm support for standing.',
+          border: 'border-cyan-500/20 hover:border-cyan-500/50',
+          badge: 'Persist to Walrus',
+          badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30',
+        },
+      ];
 
   return (
     <div className="flex flex-col items-center justify-center text-center py-6 px-4 max-w-4xl mx-auto space-y-6">
@@ -93,7 +140,7 @@ export function MascotHero({ onSelectPrompt, activeCaregiverName }: MascotHeroPr
         </h1>
 
         <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm font-medium max-w-xl mx-auto mt-2 leading-relaxed">
-          I am <span className="text-purple-600 dark:text-purple-300 font-bold">KIRO</span>. Connected to Eleanor’s decentralized Walrus Memory vault on Sui. Speak naturally to update vitals, check drug contraindications, or record clinical observations.
+          I am <span className="text-purple-600 dark:text-purple-300 font-bold">KIRO</span>. Connected to {isPersonalUser ? 'your' : `${patientDisplayName}’s`} decentralized Walrus Memory vault on Sui. Speak naturally to update vitals, check drug contraindications, or record clinical observations.
         </p>
       </div>
 

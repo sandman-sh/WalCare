@@ -289,11 +289,13 @@ export function ProfileView({
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {formData.name || 'Eleanor Vance'}
+                  {formData.name || (suiAccount ? 'Your Health Profile' : 'Eleanor Vance')}
                 </h1>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  Age {formData.age}
-                </span>
+                {formData.age > 0 && (
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    Age {formData.age}
+                  </span>
+                )}
                 <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                   Blood {formData.bloodGroup}
                 </span>
@@ -336,7 +338,7 @@ export function ProfileView({
             )}
 
             <button
-              onClick={() => onAskKIRO('Analyze Eleanor’s health profile and summarize recommendations.')}
+              onClick={() => onAskKIRO(`Analyze ${formData.name || 'my'} health profile and summarize recommendations.`)}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-bold cursor-pointer transition-colors"
             >
               <Sparkles className="w-3.5 h-3.5 text-rose-400" />
@@ -362,6 +364,7 @@ export function ProfileView({
               </label>
               <input
                 type="text"
+                placeholder="e.g. Alex Johnson"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
@@ -376,7 +379,8 @@ export function ProfileView({
                 </label>
                 <input
                   type="number"
-                  value={formData.age}
+                  placeholder="e.g. 45"
+                  value={formData.age || ''}
                   onChange={(e) => handleInputChange('age', parseInt(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                   required
@@ -440,7 +444,8 @@ export function ProfileView({
                 </label>
                 <input
                   type="number"
-                  value={formData.heightCm}
+                  placeholder="e.g. 175"
+                  value={formData.heightCm || ''}
                   onChange={(e) => handleInputChange('heightCm', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                 />
@@ -453,7 +458,8 @@ export function ProfileView({
                 <input
                   type="number"
                   step="0.1"
-                  value={formData.weightKg}
+                  placeholder="e.g. 70"
+                  value={formData.weightKg || ''}
                   onChange={(e) => handleInputChange('weightKg', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
                 />
@@ -469,7 +475,7 @@ export function ProfileView({
                   <input
                     type="number"
                     placeholder="120"
-                    value={formData.systolicBp}
+                    value={formData.systolicBp || ''}
                     onChange={(e) => handleInputChange('systolicBp', parseInt(e.target.value) || 0)}
                     className="w-1/2 px-2.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-center"
                   />
@@ -477,7 +483,7 @@ export function ProfileView({
                   <input
                     type="number"
                     placeholder="80"
-                    value={formData.diastolicBp}
+                    value={formData.diastolicBp || ''}
                     onChange={(e) => handleInputChange('diastolicBp', parseInt(e.target.value) || 0)}
                     className="w-1/2 px-2.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-center"
                   />
@@ -490,7 +496,8 @@ export function ProfileView({
                 </label>
                 <input
                   type="number"
-                  value={formData.heartRate}
+                  placeholder="e.g. 72"
+                  value={formData.heartRate || ''}
                   onChange={(e) => handleInputChange('heartRate', parseInt(e.target.value) || 0)}
                   className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/50"
                 />
@@ -503,7 +510,8 @@ export function ProfileView({
               </label>
               <input
                 type="number"
-                value={formData.glucose}
+                placeholder="e.g. 95"
+                value={formData.glucose || ''}
                 onChange={(e) => handleInputChange('glucose', parseInt(e.target.value) || 0)}
                 className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
               />

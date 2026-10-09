@@ -11,6 +11,7 @@ import {
   X,
   Sparkles,
   RefreshCw,
+  Users,
 } from 'lucide-react';
 
 import { getWallets } from '@mysten/wallet-standard';
@@ -43,6 +44,7 @@ interface WalletModalProps {
   onConnect: (account: SuiAccount) => void;
   onDisconnect: () => void;
   onOpenProfile?: () => void;
+  onContinueGuest?: () => void;
 }
 
 export function WalletModal({
@@ -52,6 +54,7 @@ export function WalletModal({
   onConnect,
   onDisconnect,
   onOpenProfile,
+  onContinueGuest,
 }: WalletModalProps) {
   const [copied, setCopied] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -618,6 +621,24 @@ export function WalletModal({
                     )}
                   </button>
                 ))}
+              </div>
+
+              {/* Guest Mode Option */}
+              <div className="pt-3 border-t border-slate-200 dark:border-white/10 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onContinueGuest?.();
+                    onClose();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-200 dark:border-white/10"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Explore in Guest Mode (Demo Personas)</span>
+                </button>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Experience WalCare with pre-seeded Eleanor Vance records &amp; clinical personas without connecting a wallet.
+                </p>
               </div>
             </div>
           )}

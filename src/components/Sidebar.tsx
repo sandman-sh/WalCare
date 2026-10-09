@@ -17,10 +17,13 @@ import {
   Stethoscope,
   User,
   Wallet,
+  Users,
+  Shield,
 } from 'lucide-react';
 import { Caregiver } from '@/types/carecircle';
 import { CAREGIVERS } from '@/lib/seedData';
 import { SuiAccount } from './WalletModal';
+import { UserProfile } from '@/types/carecircle';
 
 export type ActiveTab = 'dashboard' | 'profile' | 'reports' | 'calendar' | 'chat' | 'vault' | 'console' | 'diff' | 'handover' | 'settings';
 
@@ -36,6 +39,9 @@ interface SidebarProps {
   onCloseMobile: () => void;
   suiAccount?: SuiAccount | null;
   onConnectWallet?: () => void;
+  userProfile?: UserProfile | null;
+  isGuestMode?: boolean;
+  onToggleGuestMode?: () => void;
 }
 
 export function Sidebar({
@@ -50,6 +56,9 @@ export function Sidebar({
   onCloseMobile,
   suiAccount,
   onConnectWallet,
+  userProfile,
+  isGuestMode = false,
+  onToggleGuestMode,
 }: SidebarProps) {
   const navItems = [
     {
@@ -108,6 +117,10 @@ export function Sidebar({
     if (id.includes('physio')) return <Activity className="w-4 h-4" />;
     return <Heart className="w-4 h-4" />;
   };
+
+  const isWalletConnected = !isGuestMode && !!suiAccount;
+  const profileName = userProfile?.name || '';
+  const profileInitial = profileName ? profileName.charAt(0).toUpperCase() : suiAccount?.address?.slice(2, 4)?.toUpperCase() || '?';
 
   return (
     <>
@@ -195,67 +208,134 @@ export function Sidebar({
           </nav>
         </div>
 
-        {/* Bottom Section: Caregiver Switcher + Wallet Connect + Logout */}
+        {/* Bottom Section */}
         <div className="space-y-2.5 px-3 pr-4 shrink-0 pt-2 border-t border-white/5">
-          {/* Caregiver Persona Switcher */}
-          <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mb-1.5">
-              <span className="flex items-center gap-1">
-                <UserCheck className="w-3.5 h-3.5 text-purple-400" />
-                Persona: <strong className="text-purple-300 ml-0.5">{activeCaregiver.role}</strong>
-              </span>
+          {/* Mode Indicator: Guest vs Wallet Connected */}
+          {isWalletConnected ? (
+            /* ========== WALLET CONNECTED: Real User Identity Card ========== */
+            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-300">
+                  <Shield className="w-3.5 h-3.5" />
+                  Wallet Connected
+                </span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+
+              {/* User Identity */}
               <button
-                onClick={onResetMemories}
-                className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer transition-colors"
-                title="Re-seed 30 Walrus Certified Memories"
+                onClick={() => { onTabChange('profile'); onCloseMobile(); }}
+                className="w-full flex items-center gap-2.5 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-left"
               >
-                <RotateCcw className="w-3 h-3" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
+                  {userProfile?.avatarUrl ? (
+                    <img src={userProfile.avatarUrl} alt="" className="w-full h-full rounded-xl object-cover" />
+                  ) : (
+                    profileInitial
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-white truncate">
+                    {profileName || 'Set Up Profile'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono truncate">
+                    {suiAccount.address.slice(0, 8)}...{suiAccount.address.slice(-6)}
+                  </div>
+                </div>
               </button>
-            </div>
 
-            <div className="grid grid-cols-2 gap-1">
-              {CAREGIVERS.map((cg) => {
-                const isSelected = activeCaregiver.id === cg.id;
-                return (
+              {/* Balance */}
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-400">Balance</span>
+                <span className="font-bold text-cyan-300">{suiAccount.balanceSui} SUI</span>
+              </div>
+
+              {/* Quick Switch to Guest Mode */}
+              {onToggleGuestMode && (
+                <button
+                  type="button"
+                  onClick={onToggleGuestMode}
+                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-amber-300 font-semibold cursor-pointer transition-colors border border-amber-500/20"
+                >
+                  <Users className="w-3 h-3" />
+                  <span>Switch to Guest Demo Mode</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            /* ========== GUEST MODE: Demo Persona Switcher ========== */
+            <div className="space-y-2.5">
+              {/* Guest Mode Badge */}
+              <div className="flex items-center justify-between px-1">
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                  <Users className="w-3.5 h-3.5" />
+                  Guest Mode (Demo)
+                </span>
+                {suiAccount && onToggleGuestMode && (
                   <button
-                    key={cg.id}
-                    onClick={() => onCaregiverChange(cg)}
-                    title={`${cg.name} (${cg.role})`}
-                    className={`p-1.5 rounded-lg text-center text-xs transition-all cursor-pointer flex flex-col items-center justify-center ${
-                      isSelected
-                        ? 'bg-purple-600/80 text-white font-bold ring-1 ring-purple-300 shadow-sm'
-                        : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                    }`}
+                    type="button"
+                    onClick={onToggleGuestMode}
+                    className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
                   >
-                    <div className="text-purple-300 text-xs mb-0.5">{getCaregiverIcon(cg.id)}</div>
-                    <div className="text-[10px] truncate max-w-full font-medium">{cg.name.split(' ')[0]}</div>
+                    My Profile
                   </button>
-                );
-              })}
-            </div>
-          </div>
+                )}
+              </div>
 
-          {/* Sui Wallet Connect Card */}
-          {suiAccount ? (
+              {/* Caregiver Persona Switcher — Only in Guest */}
+              <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mb-1.5">
+                  <span className="flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5 text-purple-400" />
+                    Persona: <strong className="text-purple-300 ml-0.5">{activeCaregiver.role}</strong>
+                  </span>
+                  <button
+                    onClick={onResetMemories}
+                    className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer transition-colors"
+                    title="Re-seed 30 Walrus Certified Memories"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1">
+                  {CAREGIVERS.map((cg) => {
+                    const isSelected = activeCaregiver.id === cg.id;
+                    return (
+                      <button
+                        key={cg.id}
+                        onClick={() => onCaregiverChange(cg)}
+                        title={`${cg.name} (${cg.role})`}
+                        className={`p-1.5 rounded-lg text-center text-xs transition-all cursor-pointer flex flex-col items-center justify-center ${
+                          isSelected
+                            ? 'bg-purple-600/80 text-white font-bold ring-1 ring-purple-300 shadow-sm'
+                            : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-purple-300 text-xs mb-0.5">{getCaregiverIcon(cg.id)}</div>
+                        <div className="text-[10px] truncate max-w-full font-medium">{cg.name.split(' ')[0]}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sui Wallet Connect / Manage Button */}
+          {isWalletConnected ? (
             <button
               onClick={onConnectWallet}
-              className="w-full flex items-center justify-between p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-xs text-purple-200 hover:bg-purple-500/25 transition-all cursor-pointer"
-              title="Manage Sui Wallet & Walrus Storage"
+              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white font-bold text-xs transition-all cursor-pointer"
+              title="Manage Wallet Connection"
             >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono font-bold text-[11px] text-white">
-                  {suiAccount.address.slice(0, 6)}...{suiAccount.address.slice(-4)}
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-cyan-300 px-1.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/30">
-                {suiAccount.balanceSui} SUI
-              </span>
+              <Wallet className="w-3.5 h-3.5" />
+              <span>Manage Wallet</span>
             </button>
           ) : (
             <button
               onClick={onConnectWallet}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold text-xs shadow-md shadow-cyan-600/20 transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold text-xs shadow-md shadow-cyan-600/20 transition-all cursor-pointer"
             >
               <Wallet className="w-3.5 h-3.5" />
               <span>Connect Sui Wallet</span>

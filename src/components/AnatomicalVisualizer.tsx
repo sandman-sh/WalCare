@@ -26,6 +26,7 @@ interface AnatomicalVisualizerProps {
   onSelectOrgan: (organ: OrganType) => void;
   onQuickAskAI: (prompt: string) => void;
   heartRate?: number;
+  patientName?: string;
 }
 
 const ORGAN_TABS = [
@@ -42,6 +43,7 @@ export function AnatomicalVisualizer({
   onSelectOrgan,
   onQuickAskAI,
   heartRate = 110,
+  patientName = 'Eleanor Vance',
 }: AnatomicalVisualizerProps) {
   const { theme } = useTheme();
   const [activeHotspot, setActiveHotspot] = useState<OrganType>(selectedOrgan);
@@ -84,20 +86,20 @@ export function AnatomicalVisualizer({
   const getOrganPrompt = (organ: OrganType) => {
     switch (organ) {
       case 'heart':
-        return `Analyze Eleanor’s telemetry heart rate of ${heartRate} bpm and AFib history from Walrus memory.`;
+        return `Analyze ${patientName}’s telemetry heart rate of ${heartRate} bpm and cardiovascular telemetry from Walrus memory.`;
       case 'stomach':
-        return 'Why is Ibuprofen contraindicated for Eleanor Vance based on her gastritis recorded in Walrus Memory?';
+        return `Why are NSAIDs contraindicated for ${patientName} based on clinical observations recorded in Walrus Memory?`;
       case 'lungs':
-        return 'Review Eleanor’s respiratory auscultation notes and verify no nocturnal dyspnea.';
+        return `Review ${patientName}’s respiratory telemetry notes and verify oxygenation baseline.`;
       case 'brain':
-        return 'Summarize Eleanor’s cognitive baseline and memory orientation from the latest caregiver notes.';
+        return `Summarize ${patientName}’s cognitive baseline and memory orientation from the latest Walrus notes.`;
       case 'eyes':
-        return 'What are the environmental fall prevention protocols for Eleanor Vance?';
+        return `What are the environmental fall prevention protocols for ${patientName}?`;
       case 'mobility':
-        return 'Explain David DPT’s gait transfer instructions for Eleanor Vance.';
+        return `Explain mobility and gait transfer instructions for ${patientName}.`;
       case 'skin':
       default:
-        return 'Review skin integrity and barrier cream schedule for Eleanor Vance.';
+        return `Review skin integrity and barrier cream schedule for ${patientName}.`;
     }
   };
 

@@ -1,4 +1,4 @@
-export type CaregiverRole = 'daughter' | 'nurse' | 'physio' | 'physician';
+export type CaregiverRole = 'daughter' | 'nurse' | 'physio' | 'physician' | 'patient' | 'owner' | string;
 
 export interface Caregiver {
   id: string;

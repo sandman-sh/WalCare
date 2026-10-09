@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar, ActiveTab } from '@/components/Sidebar';
 import { TopHeader } from '@/components/TopHeader';
 import { DashboardView } from '@/components/DashboardView';
@@ -165,7 +165,39 @@ export default function CareCirclePage() {
   // Sui Wallet & User Profile State
   const [suiAccount, setSuiAccount] = useState<SuiAccount | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState<boolean>(false);
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(true);
   const [userProfile, setUserProfile] = useState<UserProfile>(DEMO_USER_PROFILE);
+
+  // Active Caregiver Actor: personal authenticated user if wallet connected, otherwise demo caregiver
+  const currentUserCaregiver: Caregiver = useMemo(() => {
+    if (!isGuestMode && suiAccount) {
+      return {
+        id: suiAccount.address,
+        name: userProfile.name || `Sui User (${suiAccount.address.slice(0, 6)}...)`,
+        role: 'patient',
+        title: 'Authenticated Patient / Account Owner',
+        badge: 'Sui Verified',
+        avatar: userProfile.avatarUrl || '👤',
+        color: 'from-cyan-500 to-purple-600',
+        shiftHours: '24/7 Personal Access',
+        responsibilities: ['Self-care monitoring', 'Clinical record owner', 'Decentralized consent manager'],
+      };
+    }
+    return activeCaregiver;
+  }, [isGuestMode, suiAccount, userProfile, activeCaregiver]);
+
+  const handleToggleGuestMode = () => {
+    setIsGuestMode((prev) => {
+      const next = !prev;
+      if (next) {
+        setUserProfile(DEMO_USER_PROFILE);
+      } else if (suiAccount) {
+        const prof = loadWalletProfile(suiAccount.address) || createBlankProfile(suiAccount.address);
+        setUserProfile(prof);
+      }
+      return next;
+    });
+  };
 
   // Chat message stream state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -229,6 +261,7 @@ export default function CareCirclePage() {
       if (savedWallet) {
         const parsedWallet = JSON.parse(savedWallet);
         setSuiAccount(parsedWallet);
+        setIsGuestMode(false);
 
         // Load this wallet's profile (wallet-keyed), or create blank if first time
         const walletProfile = loadWalletProfile(parsedWallet.address);
@@ -241,7 +274,8 @@ export default function CareCirclePage() {
           setUserProfile(blank);
         }
       } else {
-        // No wallet connected — show demo profile for guest experience
+        // No wallet connected — start in guest mode with demo profile
+        setIsGuestMode(true);
         setUserProfile(DEMO_USER_PROFILE);
       }
       const savedCal = localStorage.getItem('walcare_calendar_items');
@@ -320,9 +354,9 @@ export default function CareCirclePage() {
     const newMsg: ChatMessage = {
       id: userMsgId,
       sender: 'user',
-      authorId: activeCaregiver.id,
-      authorName: activeCaregiver.name,
-      authorRole: activeCaregiver.role,
+      authorId: currentUserCaregiver.id,
+      authorName: currentUserCaregiver.name,
+      authorRole: currentUserCaregiver.role,
       content: text,
       timestamp: new Date().toISOString(),
     };
@@ -336,10 +370,11 @@ export default function CareCirclePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          authorId: activeCaregiver.id,
+          authorId: currentUserCaregiver.id,
+          caregiver: currentUserCaregiver,
           isAmnesiaMode,
           chatHistory: messages.slice(-4),
-          userProfile,
+          userProfile: isGuestMode ? DEMO_USER_PROFILE : userProfile,
         }),
       });
 
@@ -469,7 +504,7 @@ export default function CareCirclePage() {
             setActiveTab(tab);
           }
         }}
-        activeCaregiver={activeCaregiver}
+        activeCaregiver={currentUserCaregiver}
         onCaregiverChange={setActiveCaregiver}
         totalBlobs={totalBlobs}
         totalDocs={totalDocs}
@@ -478,6 +513,9 @@ export default function CareCirclePage() {
         onCloseMobile={() => setIsMobileOpen(false)}
         suiAccount={suiAccount}
         onConnectWallet={() => setIsWalletModalOpen(true)}
+        userProfile={userProfile}
+        isGuestMode={isGuestMode}
+        onToggleGuestMode={handleToggleGuestMode}
       />
 
       {/* Main Content View Container */}
@@ -485,7 +523,7 @@ export default function CareCirclePage() {
         {/* Top Header */}
         <TopHeader
           title={getTabTitle()}
-          activeCaregiver={activeCaregiver}
+          activeCaregiver={currentUserCaregiver}
           isAmnesiaMode={isAmnesiaMode}
           onToggleAmnesia={() => setIsAmnesiaMode((prev) => !prev)}
           onNewChat={() => {
@@ -498,18 +536,23 @@ export default function CareCirclePage() {
           onConnectWallet={() => setIsWalletModalOpen(true)}
           userProfile={userProfile}
           onOpenProfile={() => setActiveTab('profile')}
+          isGuestMode={isGuestMode}
         />
 
         {/* View Switcher */}
         {activeTab === 'dashboard' && (
           <DashboardView
-            activeCaregiver={activeCaregiver}
+            activeCaregiver={currentUserCaregiver}
             onNavigateToTab={(tab) => setActiveTab(tab)}
             onQuickAskAI={(prompt) => {
               handleSendMessage(prompt);
             }}
             totalBlobs={totalBlobs}
             totalDocs={totalDocs}
+            userProfile={userProfile}
+            suiAccount={suiAccount}
+            isGuestMode={isGuestMode}
+            onSaveUserProfile={handleSaveProfile}
           />
         )}
 
@@ -532,7 +575,7 @@ export default function CareCirclePage() {
               messages={messages}
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
-              activeCaregiver={activeCaregiver}
+              activeCaregiver={currentUserCaregiver}
               onCaregiverChange={setActiveCaregiver}
               isAmnesiaMode={isAmnesiaMode}
               onOpenDiffModal={(userPrompt, memoryReply, amnesiaReply) => {
@@ -543,6 +586,10 @@ export default function CareCirclePage() {
                   amnesiaReply,
                 });
               }}
+              userProfile={userProfile}
+              suiAccount={suiAccount}
+              isGuestMode={isGuestMode}
+              onSwitchToGuest={() => setIsGuestMode(true)}
             />
           </div>
         )}
@@ -557,7 +604,7 @@ export default function CareCirclePage() {
                   Caregiver Schedule
                 </span>
                 <h2 className="text-2xl font-black text-white mt-1">
-                  {userProfile.name} • Care Calendar
+                  {userProfile.name || (isGuestMode ? 'Eleanor Vance' : 'Personal')} • Care Calendar
                 </h2>
                 <p className="text-xs text-slate-300 mt-1">
                   Scheduled shifts, telehealth visits, physical therapy, and medication times.
@@ -795,6 +842,7 @@ export default function CareCirclePage() {
         account={suiAccount}
         onConnect={(acc) => {
           setSuiAccount(acc);
+          setIsGuestMode(false);
           localStorage.setItem('walcare_sui_account', JSON.stringify(acc));
 
           // Load existing profile for this wallet, or create a fresh blank one
@@ -813,9 +861,14 @@ export default function CareCirclePage() {
         }}
         onDisconnect={() => {
           setSuiAccount(null);
+          setIsGuestMode(true);
           localStorage.removeItem('walcare_sui_account');
           // Revert to demo profile for guest experience
           setUserProfile(DEMO_USER_PROFILE);
+        }}
+        onContinueGuest={() => {
+          setIsGuestMode(true);
+          setIsWalletModalOpen(false);
         }}
         onOpenProfile={() => setActiveTab('profile')}
       />
